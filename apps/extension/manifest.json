@@ -1,0 +1,35 @@
+{
+    "manifest_version": 3,
+    "name": "Time = Asset Dashboard",
+    "version": "1.0",
+    "description": "Tracks your time on SNS and visualizes the lost asset value.",
+    "permissions": [
+        "tabs",
+        "storage",
+        "alarms"
+    ],
+    "host_permissions": [
+        "*://*.youtube.com/*",
+        "*://*.x.com/*",
+        "*://*.twitter.com/*",
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*",
+        "http://localhost:3001/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icon-16.png",
+            "48": "icon-48.png",
+            "128": "icon-128.png"
+        }
+    },
+    "icons": {
+        "16": "icon-16.png",
+        "48": "icon-48.png",
+        "128": "icon-128.png"
+    }
+}
