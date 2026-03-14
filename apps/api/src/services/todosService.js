@@ -7,11 +7,13 @@ const { httpError } = require('../utils/httpError');
 const todosRepository = require('../repositories/todosRepository');
 const { mapTodoRowToResponse, mapTodoPatchToUpdate } = require('../models/todoModel');
 
+// ユーザーのTodo一覧を取得
 async function getTodos(userId) {
     const rows = await todosRepository.listTodosByUser(userId);
     return rows.map(mapTodoRowToResponse);
 }
 
+// 新しいTodoを追加
 async function addTodo(userId, todoData) {
     const title = String(todoData?.title || '').trim();
     if (!title) {
@@ -25,6 +27,7 @@ async function addTodo(userId, todoData) {
     return mapTodoRowToResponse(row);
 }
 
+// 既存のTodoを更新
 async function editTodo(userId, id, patch) {
     const update = mapTodoPatchToUpdate(patch || {});
     if (Object.keys(update).length === 0) {
@@ -35,6 +38,7 @@ async function editTodo(userId, id, patch) {
     return mapTodoRowToResponse(row);
 }
 
+// Todoを削除
 async function removeTodo(userId, id) {
     await todosRepository.deleteTodo(userId, id);
     return { success: true };

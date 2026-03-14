@@ -20,6 +20,7 @@ apps/api/
       statusController.js
       todosController.js
       blacklistController.js
+      calendarEventsController.js
       timeController.js
       dashboardController.js
     middlewares/
@@ -28,10 +29,14 @@ apps/api/
     models/
       todoModel.js
       blacklistModel.js
+      calendarEventModel.js
     repositories/
       todosRepository.js
       alertRulesRepository.js
       tabSessionsRepository.js
+      calendarEventsRepository.js
+      btcPriceHistoryRepository.js
+      wasteCostSnapshotsRepository.js
     routes/
       index.js
     services/
@@ -39,6 +44,8 @@ apps/api/
       blacklistService.js
       timeTrackingService.js
       dashboardService.js
+      calendarEventsService.js
+      assetValuationService.js
     utils/
       httpError.js
 ```
@@ -75,6 +82,7 @@ apps/api/
 ## src/config/env.js
 - `dotenv` で `.env` を読み込む。
 - `PORT`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、スコア計算系の設定値を集約。
+- 追加で `HOURLY_WAGE_JPY`、`BTC_PRICE_CACHE_MINUTES` を管理。
 
 ## src/config/supabase.js
 - `createClient()` でSupabaseクライアントを作る。
@@ -101,6 +109,10 @@ apps/api/
 - サイト名生成（`youtube.com` → `youtube`）。
 - `alert_rules` の行を `blacklist` レスポンス形式へ変換。
 
+## src/models/calendarEventModel.js
+- `calendar_events` のDB行をAPI返却形式へ変換。
+- PATCHデータをDB更新形式へ変換。
+
 ## src/repositories/todosRepository.js
 - `todos` テーブルに対する `list/create/update/delete`。
 - すべて `user_id` 条件を付与してユーザー分離。
@@ -112,6 +124,17 @@ apps/api/
 ## src/repositories/tabSessionsRepository.js
 - `tab_sessions` への挿入。
 - ダッシュボード集計用に `list` を提供。
+
+## src/repositories/calendarEventsRepository.js
+- `calendar_events` の `list/create/update/delete/find` を担当。
+- `from/to` クエリ付き一覧取得に対応。
+
+## src/repositories/btcPriceHistoryRepository.js
+- `btc_price_history` から最新価格取得。
+- BTC価格履歴のINSERTを担当。
+
+## src/repositories/wasteCostSnapshotsRepository.js
+- `waste_cost_snapshots` への集計結果INSERTを担当。
 
 ## src/services/todosService.js
 - タイトル必須チェック。
@@ -128,6 +151,16 @@ apps/api/
 ## src/services/dashboardService.js
 - `todos` / `blacklist` / `tab_sessions` をまとめて取得。
 - `timeData` 集計、`totalTimeSeconds` 算出、スコア計算を実施。
+- 追加で `assetValuationService` を呼び、JPY/BTC換算を実価格ベースで返却。
+
+## src/services/calendarEventsService.js
+- カレンダーイベントのバリデーション（開始・終了日時）を実施。
+- `list/create/update/delete` の業務ロジックを担当。
+
+## src/services/assetValuationService.js
+- CoinGeckoからBTC/JPYを取得（失敗時は履歴fallback）。
+- `btc_price_history` に価格履歴保存。
+- 浪費秒数をJPY/BTCへ換算し、`waste_cost_snapshots` に保存。
 
 ## src/controllers/statusController.js
 - `GET /api/status` に `{"status":"ok"}` を返す。
@@ -139,6 +172,9 @@ apps/api/
 ## src/controllers/blacklistController.js
 - `GET/POST/DELETE /api/blacklist` の入出力制御。
 
+## src/controllers/calendarEventsController.js
+- `GET/POST/PUT/DELETE /api/calendar-events` の入出力制御。
+
 ## src/controllers/timeController.js
 - `POST /api/time` を処理。
 - 保存後に最新ダッシュボードを取得し、`score` / `timeData` を返す。
@@ -149,6 +185,7 @@ apps/api/
 ## src/routes/index.js
 - すべてのエンドポイントを定義。
 - 非同期controllerは `asyncHandler()` でラップ。
+- 追加で `calendar-events` 系エンドポイントを定義。
 
 ---
 
@@ -164,6 +201,8 @@ DEFAULT_USER_ID=00000000-0000-0000-0000-000000000000
 DEFAULT_SCORE_BASE=1000
 SCORE_RECOVERY_PER_DONE_TODO=50
 SCORE_PENALTY_PER_SECOND=1
+HOURLY_WAGE_JPY=3000
+BTC_PRICE_CACHE_MINUTES=10
 ```
 
 > 開発中は `DEFAULT_USER_ID` を固定で使えます。本番はJWTからユーザーIDを取り出す方式へ変更してください。
@@ -175,7 +214,20 @@ SCORE_PENALTY_PER_SECOND=1
 - `todos` ← ToDo API
 - `alert_rules` ← Blacklist API
 - `tab_sessions` ← Timeトラッキング
-- `profiles` / `calendar_events` / `btc_price_history` / `waste_cost_snapshots` は将来拡張対象
+- `calendar_events` ← カレンダーイベントAPI（実装済み）
+- `btc_price_history` ← BTC価格履歴（実装済み）
+- `waste_cost_snapshots` ← 浪費金額スナップショット（実装済み）
+
+## 5.1 追加したエンドポイント（今回）
+
+- `GET /api/calendar-events`
+- `POST /api/calendar-events`
+- `PUT /api/calendar-events/:id`
+- `DELETE /api/calendar-events/:id`
+
+既存エンドポイントの機能拡張:
+- `POST /api/time` に `alert` を追加
+- `GET /api/dashboard` に `assets`（BTC実価格ベース）を追加
 
 ---
 

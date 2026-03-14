@@ -16,6 +16,8 @@ const env = {
     DEFAULT_SCORE_BASE: Number(process.env.DEFAULT_SCORE_BASE || 1000),
     SCORE_RECOVERY_PER_DONE_TODO: Number(process.env.SCORE_RECOVERY_PER_DONE_TODO || 50),
     SCORE_PENALTY_PER_SECOND: Number(process.env.SCORE_PENALTY_PER_SECOND || 1),
+    HOURLY_WAGE_JPY: Number(process.env.HOURLY_WAGE_JPY || 3000),
+    BTC_PRICE_CACHE_MINUTES: Number(process.env.BTC_PRICE_CACHE_MINUTES || 10),
 };
 
 module.exports = { env };

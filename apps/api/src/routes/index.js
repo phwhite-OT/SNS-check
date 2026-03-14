@@ -17,6 +17,12 @@ const {
     createBlacklist,
     deleteBlacklist,
 } = require('../controllers/blacklistController');
+const {
+    getCalendarEvents,
+    createCalendarEvent,
+    updateCalendarEvent,
+    deleteCalendarEvent,
+} = require('../controllers/calendarEventsController');
 const { postTime } = require('../controllers/timeController');
 const { getDashboard } = require('../controllers/dashboardController');
 
@@ -45,6 +51,18 @@ router.post('/blacklist', asyncHandler(createBlacklist));
 
 // ブラックリストからドメインを削除
 router.delete('/blacklist/:domain', asyncHandler(deleteBlacklist));
+
+// カレンダーイベントの一覧取得
+router.get('/calendar-events', asyncHandler(getCalendarEvents));
+
+// カレンダーイベントの新規作成
+router.post('/calendar-events', asyncHandler(createCalendarEvent));
+
+// カレンダーイベントの更新
+router.put('/calendar-events/:id', asyncHandler(updateCalendarEvent));
+
+// カレンダーイベントの削除
+router.delete('/calendar-events/:id', asyncHandler(deleteCalendarEvent));
 
 // 時間計測データの受信とダッシュボード情報の取得
 router.post('/time', asyncHandler(postTime));

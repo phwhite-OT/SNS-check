@@ -30,7 +30,21 @@ async function listTabSessionsByUser(userId) {
     return data || [];
 }
 
+// 指定ユーザー・指定ドメインの「今日」の滞在秒数合計を取得
+async function getTodayDurationByDomain(userId, domain, dayStartIso) {
+    const { data, error } = await supabase
+        .from('tab_sessions')
+        .select('duration_sec')
+        .eq('user_id', userId)
+        .eq('domain', domain)
+        .gte('started_at', dayStartIso);
+
+    if (error) throw error;
+    return (data || []).reduce((sum, row) => sum + Number(row.duration_sec || 0), 0);
+}
+
 module.exports = {
     insertTabSession,
     listTabSessionsByUser,
+    getTodayDurationByDomain,
 };

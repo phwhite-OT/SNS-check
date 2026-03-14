@@ -21,10 +21,15 @@ function getUserId(req) {
 // 時間計測データを受信して保存し、最新のダッシュボード情報を返す
 async function postTime(req, res) {
     const userId = getUserId(req);
-    await timeTrackingService.addTime(userId, req.body?.site, req.body?.time);
+    const timeResult = await timeTrackingService.addTime(userId, req.body?.site, req.body?.time);
 
     const dashboard = await dashboardService.getDashboard(userId);
-    res.json({ success: true, score: dashboard.score, timeData: dashboard.timeData });
+    res.json({
+        success: true,
+        score: dashboard.score,
+        timeData: dashboard.timeData,
+        alert: timeResult.alert,
+    });
 }
 
 module.exports = {

@@ -7,6 +7,7 @@ const alertRulesRepository = require('../repositories/alertRulesRepository');
 const { normalizeDomain, mapAlertRuleRowToBlacklistItem } = require('../models/blacklistModel');
 const { httpError } = require('../utils/httpError');
 
+// デフォルトでブラックリストに入れるドメイン
 const DEFAULT_BLACKLIST = [
     'youtube.com',
     'twitter.com',
@@ -15,6 +16,7 @@ const DEFAULT_BLACKLIST = [
     'tiktok.com',
 ];
 
+// ユーザーのブラックリストにデフォルトドメインが含まれているか確認し、なければ追加する
 async function ensureDefaultBlacklist(userId) {
     const current = await alertRulesRepository.listAlertRulesByUser(userId);
     const currentSet = new Set(current.map((item) => item.target_domain));
@@ -25,12 +27,16 @@ async function ensureDefaultBlacklist(userId) {
     }
 }
 
+
+// ブラックリストの一覧を取得
 async function getBlacklist(userId) {
     await ensureDefaultBlacklist(userId);
     const rows = await alertRulesRepository.listAlertRulesByUser(userId);
     return rows.map(mapAlertRuleRowToBlacklistItem);
 }
 
+
+// ブラックリストにドメインを追加
 async function addBlacklist(userId, domain) {
     const normalized = normalizeDomain(domain);
     if (!normalized) {
@@ -42,6 +48,7 @@ async function addBlacklist(userId, domain) {
     return { success: true, blacklist: rows.map(mapAlertRuleRowToBlacklistItem) };
 }
 
+// ブラックリストからドメインを削除
 async function removeBlacklist(userId, domain) {
     const normalized = normalizeDomain(domain);
     if (!normalized) {
