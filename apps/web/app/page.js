@@ -31,6 +31,16 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
+const API_BASE = 'http://localhost:3001/api';
+// TODO: Supabaseの profiles.id（実在UUID）に置き換えてください。
+const X_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+
+const apiHeaders = (hasJson = false) => {
+  const headers = { 'x-user-id': X_USER_ID };
+  if (hasJson) headers['Content-Type'] = 'application/json';
+  return headers;
+};
+
 export default function Home() {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,7 +62,9 @@ export default function Home() {
   // Fetch data
   const fetchData = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/dashboard');
+      const res = await fetch(`${API_BASE}/dashboard`, {
+        headers: apiHeaders(),
+      });
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       setData(json);
@@ -77,9 +89,9 @@ export default function Home() {
     if (!newTodoTitle.trim()) return;
     const tagsArray = newTodoTags.split(',').map(tag => tag.trim()).filter(Boolean);
     try {
-      await fetch('http://localhost:3001/api/todos', {
+      await fetch(`${API_BASE}/todos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders(true),
         body: JSON.stringify({
           title: newTodoTitle,
           dueDate: newTodoDate,
@@ -99,9 +111,9 @@ export default function Home() {
 
   const handleToggleTodo = async (id, currentStatus) => {
     try {
-      await fetch(`http://localhost:3001/api/todos/${id}`, {
+      await fetch(`${API_BASE}/todos/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders(true),
         body: JSON.stringify({ completed: !currentStatus })
       });
       fetchData();
@@ -110,14 +122,20 @@ export default function Home() {
 
   const handleDeleteTodo = async (id) => {
     try {
-      await fetch(`http://localhost:3001/api/todos/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/todos/${id}`, {
+        method: 'DELETE',
+        headers: apiHeaders(),
+      });
       fetchData();
     } catch (e) { console.error(e); }
   };
 
   const handleDeleteBlacklist = async (domain) => {
     try {
-      await fetch(`http://localhost:3001/api/blacklist/${domain}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/blacklist/${domain}`, {
+        method: 'DELETE',
+        headers: apiHeaders(),
+      });
       fetchData();
     } catch (e) { console.error(e); }
   };
