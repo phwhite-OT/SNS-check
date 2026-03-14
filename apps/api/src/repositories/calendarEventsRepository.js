@@ -3,6 +3,8 @@
  */
 const { supabase } = require('../config/supabase');
 
+
+// ユーザーのカレンダーイベントを取得（オプションで期間指定）
 async function listCalendarEventsByUser(userId, from, to) {
     let query = supabase
         .from('calendar_events')
@@ -23,6 +25,7 @@ async function listCalendarEventsByUser(userId, from, to) {
     return data || [];
 }
 
+// 新しいカレンダーイベントを追加
 async function createCalendarEvent(userId, payload) {
     const { data, error } = await supabase
         .from('calendar_events')
@@ -40,6 +43,8 @@ async function createCalendarEvent(userId, payload) {
     return data;
 }
 
+
+// IDでカレンダーイベントを取得
 async function findCalendarEventById(userId, id) {
     const { data, error } = await supabase
         .from('calendar_events')
@@ -52,6 +57,8 @@ async function findCalendarEventById(userId, id) {
     return data || null;
 }
 
+
+// カレンダーイベントを更新
 async function updateCalendarEvent(userId, id, update) {
     const { data, error } = await supabase
         .from('calendar_events')
@@ -65,6 +72,7 @@ async function updateCalendarEvent(userId, id, update) {
     return data;
 }
 
+// カレンダーイベントを削除
 async function deleteCalendarEvent(userId, id) {
     const { error } = await supabase
         .from('calendar_events')

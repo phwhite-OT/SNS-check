@@ -8,6 +8,8 @@ const {
     mapCalendarEventPatchToUpdate,
 } = require('../models/calendarEventModel');
 
+
+// startAt と endAt の妥当性を検証。エラーがあれば httpError を投げる
 function validateDateOrder(startAt, endAt) {
     if (!startAt || !endAt) {
         throw httpError(400, 'startAt and endAt are required');
@@ -25,11 +27,13 @@ function validateDateOrder(startAt, endAt) {
     }
 }
 
+// ドメインに対する今日の利用時間とアラート状態を計算して返す
 async function getCalendarEvents(userId, query = {}) {
     const rows = await calendarEventsRepository.listCalendarEventsByUser(userId, query.from, query.to);
     return rows.map(mapCalendarEventRowToResponse);
 }
 
+// 新しいカレンダーイベントを追加。入力の妥当性を検証し、作成後のイベント情報を返す
 async function addCalendarEvent(userId, payload = {}) {
     const title = String(payload.title || '').trim();
     if (!title) {
@@ -48,6 +52,8 @@ async function addCalendarEvent(userId, payload = {}) {
     return mapCalendarEventRowToResponse(row);
 }
 
+
+// ドメインに対する今日の利用時間とアラート状態を計算して返す
 async function editCalendarEvent(userId, id, patch = {}) {
     const update = mapCalendarEventPatchToUpdate(patch);
 
@@ -71,6 +77,8 @@ async function editCalendarEvent(userId, id, patch = {}) {
     return mapCalendarEventRowToResponse(row);
 }
 
+
+// カレンダーイベントを削除
 async function removeCalendarEvent(userId, id) {
     await calendarEventsRepository.deleteCalendarEvent(userId, id);
     return { success: true };
