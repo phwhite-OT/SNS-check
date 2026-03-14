@@ -10,6 +10,7 @@ coverage
 .next/
 out/
 build
+.open-next/
 
 # misc
 .DS_Store
@@ -28,6 +29,12 @@ yarn-error.log*
 
 # vercel
 .vercel
+.wrangler/
+
+# cloudflare local env
+**/.dev.vars
+**/.dev.vars.*
+!**/.dev.vars.example
 
 # typescript
 *.tsbuildinfo
