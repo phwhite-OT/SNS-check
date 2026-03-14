@@ -9,9 +9,10 @@ app.use(express.json());
 
 // --- データ保存エリア ---
 // MVP構成: メモリ上に保存
+const todayStr = new Date().toISOString().split('T')[0];
 let todos = [
-  { id: '1', title: 'ダッシュボードの改修', completed: false },
-  { id: '2', title: 'Chrome拡張機能のテスト', completed: false }
+  { id: '1', title: 'ダッシュボードの改修', completed: false, date: todayStr, description: 'UIをモダンにする', tags: ['dev'], priority: 'high' },
+  { id: '2', title: 'Chrome拡張機能のテスト', completed: false, date: todayStr, description: '', tags: ['client'], priority: 'medium' }
 ];
 
 let blacklist = [
@@ -44,13 +45,17 @@ app.get('/api/todos', (req, res) => {
 });
 
 app.post('/api/todos', (req, res) => {
-  const { title } = req.body;
+  const { title, date, description, tags, priority } = req.body;
   if (!title) return res.status(400).json({ error: 'Title is required' });
 
   const newTodo = {
     id: Date.now().toString(),
     title,
-    completed: false
+    description: description || '',
+    tags: tags || [],
+    priority: priority || 'medium',
+    completed: false,
+    date: date || new Date().toISOString().split('T')[0]
   };
   todos.push(newTodo);
   res.json(newTodo);
@@ -71,6 +76,10 @@ app.put('/api/todos/:id', (req, res) => {
 
   if (completed !== undefined) todo.completed = completed;
   if (title !== undefined) todo.title = title;
+  if (req.body.description !== undefined) todo.description = req.body.description;
+  if (req.body.tags !== undefined) todo.tags = req.body.tags;
+  if (req.body.priority !== undefined) todo.priority = req.body.priority;
+  if (req.body.date !== undefined) todo.date = req.body.date;
 
   res.json(todo);
 });

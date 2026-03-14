@@ -18,7 +18,19 @@ export default function Home() {
 
   // Form states
   const [newTodoTitle, setNewTodoTitle] = useState('');
+  const [newTodoDesc, setNewTodoDesc] = useState('');
+  const [newTodoTags, setNewTodoTags] = useState('');
+  const [newTodoPriority, setNewTodoPriority] = useState('medium');
+  const [newTodoDate, setNewTodoDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  
   const [newDomain, setNewDomain] = useState('');
+  // Calendar states
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  // Navigation states
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   // Fetch data
   const fetchData = async () => {
@@ -46,13 +58,28 @@ export default function Home() {
   const handleAddTodo = async (e) => {
     e.preventDefault();
     if (!newTodoTitle.trim()) return;
+    
+    // Parse comma separated tags
+    const tagsArray = newTodoTags.split(',').map(tag => tag.trim()).filter(Boolean);
+
     try {
       await fetch('http://localhost:3001/api/todos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTodoTitle })
+        body: JSON.stringify({ 
+          title: newTodoTitle, 
+          date: newTodoDate,
+          description: newTodoDesc,
+          tags: tagsArray,
+          priority: newTodoPriority
+        })
       });
+      // Reset form
       setNewTodoTitle('');
+      setNewTodoDesc('');
+      setNewTodoTags('');
+      setNewTodoPriority('medium');
+      setIsTaskModalOpen(false); // Close modal
       fetchData();
     } catch (e) { console.error(e); }
   };
@@ -68,21 +95,11 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
-  const handleDeleteTodo = async (id) => {
-    try {
-      await fetch(`http://localhost:3001/api/todos/${id}`, {
-        method: 'DELETE'
-      });
-      fetchData();
-    } catch (e) { console.error(e); }
-  };
-
   // Blacklist Actions
   const handleAddBlacklist = async (e) => {
     e.preventDefault();
     if (!newDomain.trim()) return;
     try {
-      // 簡易的にnameはドメインの最初の部分とする
       const name = newDomain.split('.')[0] || newDomain;
       await fetch('http://localhost:3001/api/blacklist', {
         method: 'POST',
@@ -94,7 +111,8 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
-  const handleDeleteBlacklist = async (domain) => {
+  const handleDeleteBlacklist = async (e, domain) => {
+    e.stopPropagation(); // Avoid triggering card click if we had one
     try {
       await fetch(`http://localhost:3001/api/blacklist/${domain}`, {
         method: 'DELETE'
@@ -103,279 +121,467 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
-  if (isLoading) return <div className="loading">Loading dashboard...</div>;
+  if (isLoading) return <div className="loading">Loading workspace...</div>;
   if (error) return <div className="error-card">{error}</div>;
   if (!data) return null;
 
+  // Calculate pending tasks
+  // Calculate pending tasks for selected date
+  const displayTodos = data.todos.filter(t => t.date === selectedDate);
+  const pendingTasks = displayTodos.filter(t => !t.completed).length;
+
   // Format history for chart
-  const chartData = data.history.map(item => ({
-    time: new Date(item.timestamp).toLocaleTimeString(),
-    score: item.score
-  }));
+  const chartData = data.history.map((item, index) => {
+    const isLast = index === data.history.length - 1;
+    return {
+      time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      score: item.score,
+      // For a clean look, maybe only show the dot on the last item
+    };
+  });
+
+  // Calculate progress bar (simplified logic: max 2000, min 0 for display purposes)
+  const maxScore = 2000;
+  const progressPercent = Math.min(Math.max((data.score / maxScore) * 100, 0), 100);
+
+  // Calendar Helpers
+  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+  const daysInMonth = getDaysInMonth(currentMonth.getFullYear(), currentMonth.getMonth());
+  const firstDay = getFirstDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth());
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const blanks = Array.from({ length: firstDay }, (_, i) => i);
+
+  const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+
+  const hasTodos = (year, month, day) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return data.todos.some(t => t.date === dateStr && !t.completed);
+  };
+  
+  const getTodosForDate = (year, month, day) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return data.todos.filter(t => t.date === dateStr);
+  };
+
+  const handleDayClick = (dateStr) => {
+    setSelectedDate(dateStr);
+    setActiveTab('dashboard');
+  };
 
   return (
-    <div className="dashboard-container">
-
-      {/* 1. Score & Graph Section */}
-      <section className="main-section glass-panel">
-        <div className="score-header">
-          <h2>あなたのHP (Current Score)</h2>
-          <div className="huge-score">{data.score}</div>
+    <div className="app-container">
+      {/* Sidebar Navigation */}
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <div className="logo-icon">✓</div>
+          <span>TaskFlow</span>
         </div>
-        <div className="chart-container">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-              <XAxis dataKey="time" stroke="#aaa" />
-              <YAxis domain={['auto', 'auto']} stroke="#aaa" />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }}
-                itemStyle={{ color: '#4ade80' }}
-              />
-              <Line
-                type="stepAfter"
-                dataKey="score"
-                stroke="#4ade80"
-                strokeWidth={3}
-                dot={{ r: 4, fill: '#4ade80' }}
-                activeDot={{ r: 8 }}
-                isAnimationActive={true}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+
+        <div className="sidebar-btn-wrapper">
+          <button className="sidebar-btn" onClick={() => setIsTaskModalOpen(true)}>
+            <span style={{ fontSize: '1.2rem' }}>+</span> 新規タスク
+          </button>
         </div>
-      </section>
 
-      <div className="bottom-grid">
-        {/* 2. ToDo List Section */}
-        <section className="todo-section glass-panel">
-          <h2>🏆 クエスト (ToDo List)</h2>
-          <p className="hint">タスクを完了してHPを回復しよう！ (+50 HP)</p>
+        <div className="sidebar-menu-group">
+          <div className="sidebar-menu-title">ワークスペース</div>
+          <a className="sidebar-menu-item active">
+            <i>📅</i>
+            <span>今日</span>
+            <span className="sidebar-badge">{pendingTasks}</span>
+          </a>
+        </div>
+      </aside>
 
-          <form className="add-form" onSubmit={handleAddTodo}>
-            <input
-              type="text"
-              value={newTodoTitle}
-              onChange={(e) => setNewTodoTitle(e.target.value)}
-              placeholder="新しいタスクを入力..."
-              className="input-field"
-            />
-            <button type="submit" className="btn-primary">追加</button>
-          </form>
+      {/* Main Container */}
+      <div className="main-wrapper">
 
-          <ul className="todo-list">
-            {data.todos.map(todo => (
-              <li key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
-                <label className="checkbox-container">
+        {/* Top Header */}
+        <header className="header">
+          <div className="search-bar">
+            <i>🔍</i>
+            <input type="text" placeholder="タスクを検索..." />
+          </div>
+
+          <nav className="header-nav">
+            <a href="#" className={activeTab === 'dashboard' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('dashboard'); }}>ダッシュボード</a>
+            <a href="#" className={activeTab === 'calendar' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActiveTab('calendar'); }}>カレンダー</a>
+          </nav>
+
+          <div className="header-actions">
+            <div className="avatar">A</div>
+          </div>
+        </header>
+
+        {/* Scrollable Dashboard / Calendar Area */}
+        <main className="dashboard-content">
+          
+          {activeTab === 'dashboard' && (
+            <>
+              {/* Welcome Banner */}
+              <section className="welcome-banner">
+            <div className="welcome-inner">
+              <div className="welcome-icon">👋🏻</div>
+              <div className="welcome-text">
+                <h1>お帰りなさい、Alexさん！</h1>
+                <p>本日は {pendingTasks} 件のタスクと {data.blacklist.length} 件の監視サイトがあります。</p>
+              </div>
+            </div>
+            <button className="btn-dismiss">✕ 閉じる</button>
+          </section>
+
+          <div className="dashboard-grid">
+
+            {/* Left Column (Tasks & Blacklist) */}
+            <div className="left-col">
+
+              {/* Tasks List Card */}
+              <div className="card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <i>📋</i> {new Date(selectedDate).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', year: 'numeric' })} のタスク
+                  </div>
+                </div>
+
+                <div className="task-list">
+                  {displayTodos.map((todo, idx) => (
+                    <div key={todo.id} className={`task-item ${todo.completed ? 'completed' : ''}`}>
+                      <div className="task-checkbox-wrapper">
+                        <input
+                          type="checkbox"
+                          className="custom-checkbox"
+                          checked={todo.completed}
+                          onChange={() => handleToggleTodo(todo.id, todo.completed)}
+                        />
+                      </div>
+                      <div className="task-content">
+                        <div className="task-title">
+                          {todo.title}
+                          {todo.priority === 'high' && <span style={{marginLeft: '0.5rem', fontSize: '0.7rem', color: '#ef4444'}}>■ High</span>}
+                        </div>
+                        
+                        {todo.description && (
+                          <div style={{fontSize: '0.8rem', color: '#64748b', marginBottom: '0.5rem'}}>
+                            {todo.description}
+                          </div>
+                        )}
+
+                        {todo.tags && todo.tags.length > 0 && (
+                          <div className="task-meta">
+                            {todo.tags.map((tag, i) => {
+                              // Assign random-looking consistent colors based on index
+                              const classNames = ['design', 'meeting', 'client', 'dev'];
+                              const colorClass = classNames[i % classNames.length];
+                              return <span key={tag} className={`task-tag ${colorClass}`}>{tag}</span>
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {displayTodos.length === 0 && <div style={{ color: '#94a3b8', textAlign: 'center', padding: '1rem' }}>この日のタスクはありません。</div>}
+                </div>
+
+                {/* The inline form has been removed in favor of the modal */}
+              </div>
+
+              {/* Quick Access (Used for Blacklist/Toxic Sites) */}
+              <div className="card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <i>🔗</i> クイックアクセス (ブラックリスト)
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>
+                  これらのサイトを見ている間、生産性スコアが減少します。
+                </div>
+
+                <div className="quick-access-grid">
+                  {/* Default/Dummy icons based on domain to match design */}
+                  {data.blacklist.map((site, i) => {
+                    const colors = ['blue', 'red', 'green', 'yellow', 'danger'];
+                    const colorClass = colors[i % colors.length];
+                    const icon = site.domain.includes('youtube') ? '▶️'
+                      : site.domain.includes('x.com') || site.domain.includes('twitter') ? '🐦'
+                        : site.domain.includes('insta') ? '📷' : '🌐';
+
+                    return (
+                      <div key={site.domain} className={`qa-card ${colorClass}`}>
+                        <button className="qa-delete" onClick={(e) => handleDeleteBlacklist(e, site.domain)}>✕</button>
+                        <div className="qa-icon">{icon}</div>
+                        <div className="qa-label">{site.name}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <form className="add-domain-wrapper" onSubmit={handleAddBlacklist}>
                   <input
-                    type="checkbox"
-                    checked={todo.completed}
-                    onChange={() => handleToggleTodo(todo.id, todo.completed)}
+                    type="text"
+                    placeholder="ブラックリストにドメインを追加 (例: netflix.com)"
+                    value={newDomain}
+                    onChange={(e) => setNewDomain(e.target.value)}
                   />
-                  <span className="checkmark"></span>
-                  <span className="todo-text">{todo.title}</span>
-                </label>
-                <button className="btn-delete" onClick={() => handleDeleteTodo(todo.id)}>✕</button>
-              </li>
-            ))}
-            {data.todos.length === 0 && <li className="empty-msg">タスクがありません。</li>}
-          </ul>
-        </section>
+                  <button type="submit">追加</button>
+                </form>
+              </div>
 
-        {/* 3. Blacklist Section */}
-        <section className="blacklist-section glass-panel">
-          <h2>☠️ 毒沼 (Blacklist)</h2>
-          <p className="hint">これらのサイトを見るとHPが減ります...</p>
+            </div>
 
-          <form className="add-form" onSubmit={handleAddBlacklist}>
-            <input
-              type="text"
-              value={newDomain}
-              onChange={(e) => setNewDomain(e.target.value)}
-              placeholder="例: netflix.com"
-              className="input-field"
-            />
-            <button type="submit" className="btn-danger">追加</button>
-          </form>
+            {/* Right Column (Calendar, Graph & Score) */}
+            <div className="right-col">
 
-          <ul className="blacklist">
-            {data.blacklist.map(b => (
-              <li key={b.domain} className="blacklist-item">
-                <span className="domain-name">{b.domain}</span>
-                <button className="btn-delete" onClick={() => handleDeleteBlacklist(b.domain)}>削除</button>
-              </li>
-            ))}
-            {data.blacklist.length === 0 && <li className="empty-msg">監視対象がありません。</li>}
-          </ul>
-        </section>
+              {/* Calendar component */}
+              <div className="card calendar-card">
+                <div className="calendar-header">
+                  <button className="calendar-nav-btn" onClick={prevMonth}>{'<'}</button>
+                  <div className="calendar-title">
+                    {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </div>
+                  <button className="calendar-nav-btn" onClick={nextMonth}>{'>'}</button>
+                </div>
+                
+                <div className="calendar-grid">
+                  <div className="calendar-day-header">SU</div>
+                  <div className="calendar-day-header">MO</div>
+                  <div className="calendar-day-header">TU</div>
+                  <div className="calendar-day-header">WE</div>
+                  <div className="calendar-day-header">TH</div>
+                  <div className="calendar-day-header">FR</div>
+                  <div className="calendar-day-header">SA</div>
+                  
+                  {blanks.map(b => <div key={`blank-${b}`} className="calendar-cell empty"></div>)}
+                  
+                  {days.map(day => {
+                    const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const isActive = selectedDate === dateStr;
+                    return (
+                      <div 
+                        key={day} 
+                        className={`calendar-cell ${isActive ? 'active' : ''}`}
+                        onClick={() => setSelectedDate(dateStr)}
+                      >
+                        {day}
+                        {hasTodos(currentMonth.getFullYear(), currentMonth.getMonth(), day) && (
+                          <div className="task-dot"></div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Score Graph (Replacing Calendar Design) */}
+              <div className="graph-card">
+                <div className="graph-header">
+                  <button className="graph-nav-btn">{'<'}</button>
+                  <div className="graph-title">スコア履歴</div>
+                  <button className="graph-nav-btn">{'>'}</button>
+                </div>
+
+                <div style={{ height: '240px', width: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
+                      <XAxis dataKey="time" stroke="rgba(255,255,255,0.5)" tick={{ fill: 'rgba(255,255,255,0.8)', fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis stroke="rgba(255,255,255,0.5)" tick={{ fill: 'rgba(255,255,255,0.8)', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#ffffff', color: '#1e293b', border: 'none', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+                        itemStyle={{ color: '#5244e1', fontWeight: 'bold' }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="score"
+                        stroke="#ffffff"
+                        strokeWidth={4}
+                        dot={false}
+                        activeDot={{ r: 6, fill: '#ffffff', stroke: '#5244e1', strokeWidth: 2 }}
+                        isAnimationActive={true}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="graph-legend">
+                  <span>● 現在のスコア: {data.score}</span>
+                  <span style={{ opacity: 0.6 }}>最高: {Math.max(...data.history.map(h => h.score))}</span>
+                </div>
+              </div>
+
+              {/* Productivity Score Summary */}
+              <div className="card score-card">
+                <div className="score-title">
+                  <i>📈</i> 生産性スコア
+                </div>
+
+                <div className="progress-bar-container">
+                  <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }}></div>
+                </div>
+
+                <p className="score-desc">
+                  現在のスコアは <strong>{data.score}</strong> です。
+                  さらに {pendingTasks} 件のタスクを完了してマイルストーンを達成し、ブラックリストのサイト閲覧を避けましょう！
+                </p>
+              </div>
+
+            </div>
+          </div>
+          </>
+          )}
+
+          {/* Full-Page Detailed Calendar View */}
+          {activeTab === 'calendar' && (
+            <div className="detailed-calendar">
+              <div className="detailed-calendar-header">
+                <div className="detailed-calendar-title">
+                  カレンダー
+                </div>
+                <div className="detailed-calendar-month-controls">
+                  <button onClick={prevMonth}>{'<'}</button>
+                  <div className="detailed-calendar-month-label">
+                    {currentMonth.toLocaleDateString('ja-JP', { month: 'long', year: 'numeric' })}
+                  </div>
+                  <button onClick={nextMonth}>{'>'}</button>
+                </div>
+                <button 
+                  className="icon-btn" 
+                  style={{background: 'var(--tf-primary)', color: 'white'}}
+                  onClick={() => setIsTaskModalOpen(true)}
+                >
+                  +
+                </button>
+              </div>
+
+              <div className="detailed-calendar-grid">
+                <div className="detailed-calendar-day-header">日</div>
+                <div className="detailed-calendar-day-header">月</div>
+                <div className="detailed-calendar-day-header">火</div>
+                <div className="detailed-calendar-day-header">水</div>
+                <div className="detailed-calendar-day-header">木</div>
+                <div className="detailed-calendar-day-header">金</div>
+                <div className="detailed-calendar-day-header">土</div>
+
+                {blanks.map(b => <div key={`blank-${b}`} className="detailed-calendar-cell empty"></div>)}
+
+                {days.map(day => {
+                  const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const isActive = selectedDate === dateStr;
+                  const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                  const dayTodos = getTodosForDate(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                  
+                  return (
+                    <div 
+                      key={day} 
+                      className={`detailed-calendar-cell ${isActive ? 'active' : ''} ${isToday ? 'today' : ''}`}
+                      onClick={() => handleDayClick(dateStr)}
+                    >
+                      <div className="detailed-calendar-date-wrapper">
+                        <div className="detailed-calendar-date">{day}</div>
+                      </div>
+                      <div className="detailed-tasks-container">
+                        {dayTodos.map(todo => (
+                          <div 
+                            key={todo.id} 
+                            className={`calendar-task-badge ${todo.completed ? 'completed' : 'pending'}`}
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              handleToggleTodo(todo.id, todo.completed); 
+                            }}
+                          >
+                            <span>{todo.completed ? '✓' : '•'}</span>
+                            <span style={{flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                              {todo.title}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+        </main>
       </div>
+      {/* Task Creation Modal */}
+      {isTaskModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsTaskModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>新しいタスクを作成</h2>
+              <button className="modal-close" onClick={() => setIsTaskModalOpen(false)}>✕</button>
+            </div>
+            
+            <form className="modal-form" onSubmit={handleAddTodo}>
+              <div className="form-group">
+                <label>タスク名 *</label>
+                <input 
+                  type="text" 
+                  placeholder="例: 四半期レビューのプレゼン資料作成"
+                  value={newTodoTitle}
+                  onChange={(e) => setNewTodoTitle(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </div>
 
-      <style jsx>{`
-        .dashboard-container {
-          display: flex;
-          flex-direction: column;
-          gap: 2rem;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-        .bottom-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-          gap: 2rem;
-        }
-        .glass-panel {
-          background: rgba(30, 41, 59, 0.6);
-          backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          padding: 2rem;
-          border-radius: 16px;
-        }
-        .main-section {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        .score-header {
-          text-align: center;
-        }
-        .huge-score {
-          font-size: 5rem;
-          font-weight: 900;
-          color: #4ade80;
-          text-shadow: 0 0 20px rgba(74, 222, 128, 0.4);
-          margin-top: 10px;
-        }
-        .chart-container {
-          margin-top: 1rem;
-          background: rgba(0,0,0,0.2);
-          border-radius: 12px;
-          padding: 1rem 1rem 1rem 0;
-        }
-        h2 {
-          color: #f8fafc;
-          margin-bottom: 0.5rem;
-          font-size: 1.5rem;
-          margin-top: 0;
-        }
-        .hint {
-          color: #94a3b8;
-          font-size: 0.9rem;
-          margin-bottom: 1.5rem;
-        }
-        .add-form {
-          display: flex;
-          gap: 0.5rem;
-          margin-bottom: 1.5rem;
-        }
-        .input-field {
-          flex: 1;
-          padding: 0.75rem 1rem;
-          border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.2);
-          background: rgba(0,0,0,0.3);
-          color: white;
-          font-size: 1rem;
-        }
-        .input-field:focus {
-          outline: none;
-          border-color: #3b82f6;
-        }
-        .btn-primary {
-          background: #3b82f6;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          padding: 0 1.5rem;
-          font-weight: bold;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-danger {
-          background: #ef4444;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          padding: 0 1.5rem;
-          font-weight: bold;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-        .btn-danger:hover { background: #dc2626; }
-        
-        .todo-list, .blacklist {
-          list-style: none;
-          padding: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          margin: 0;
-        }
-        .todo-item, .blacklist-item {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: rgba(0,0,0,0.2);
-          padding: 1rem;
-          border-radius: 8px;
-          transition: all 0.2s;
-        }
-        .todo-item.completed {
-          opacity: 0.5;
-        }
-        .todo-item.completed .todo-text {
-          text-decoration: line-through;
-          color: #94a3b8;
-        }
-        .checkbox-container {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          cursor: pointer;
-          flex: 1;
-        }
-        .todo-text {
-          font-size: 1.1rem;
-          color: #f1f5f9;
-          transition: color 0.2s;
-        }
-        .domain-name {
-          font-size: 1.1rem;
-          color: #fca5a5;
-        }
-        .btn-delete {
-          background: transparent;
-          color: #ef4444;
-          border: 1px solid #ef4444;
-          border-radius: 6px;
-          padding: 0.25rem 0.5rem;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .btn-delete:hover {
-          background: #ef4444;
-          color: white;
-        }
-        .empty-msg {
-          text-align: center;
-          color: #64748b;
-          padding: 2rem;
-        }
-        .loading {
-          text-align: center;
-          font-size: 1.5rem;
-          color: #94a3b8;
-          padding: 5rem;
-        }
-        .error-card {
-          background: rgba(239, 68, 68, 0.1);
-          color: #ef4444;
-          padding: 2rem;
-          border-radius: 12px;
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          text-align: center;
-        }
-      `}</style>
+              <div className="form-group">
+                <label>詳細 (任意)</label>
+                <textarea 
+                  placeholder="タスクの詳細な内容、リンク、メモなどを入力..."
+                  value={newTodoDesc}
+                  onChange={(e) => setNewTodoDesc(e.target.value)}
+                  rows="3"
+                ></textarea>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>日付</label>
+                  <input 
+                    type="date" 
+                    value={newTodoDate} 
+                    onChange={(e) => setNewTodoDate(e.target.value)} 
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>優先度</label>
+                  <select 
+                    value={newTodoPriority} 
+                    onChange={(e) => setNewTodoPriority(e.target.value)}
+                  >
+                    <option value="low">低 (Low)</option>
+                    <option value="medium">中 (Medium)</option>
+                    <option value="high">高 (High)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>タグ (カンマ区切りで複数入力)</label>
+                <input 
+                  type="text" 
+                  placeholder="例: デザイン, 会議, クライアントA"
+                  value={newTodoTags}
+                  onChange={(e) => setNewTodoTags(e.target.value)}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setIsTaskModalOpen(false)}>キャンセル</button>
+                <button type="submit" className="btn-submit" disabled={!newTodoTitle.trim()}>作成</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
