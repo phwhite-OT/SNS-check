@@ -10,21 +10,25 @@ function getUserId(req) {
     return req.header('x-user-id') || req.app.locals.defaultUserId;
 }
 
+// TODOの一覧を取得
 async function getTodos(req, res) {
     const todos = await todosService.getTodos(getUserId(req));
     res.json(todos);
 }
 
+// TODOを新規作成
 async function createTodo(req, res) {
     const todo = await todosService.addTodo(getUserId(req), req.body?.title);
     res.json(todo);
 }
 
+// TODOを更新
 async function updateTodo(req, res) {
     const todo = await todosService.editTodo(getUserId(req), req.params.id, req.body);
     res.json(todo);
 }
 
+// TODOを削除
 async function deleteTodo(req, res) {
     const result = await todosService.removeTodo(getUserId(req), req.params.id);
     res.json(result);
