@@ -4,13 +4,13 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
-import { 
-  Calendar as CalendarIcon, 
-  CheckCircle, 
-  Clock, 
-  Search, 
-  Plus, 
-  ChevronLeft, 
+import {
+  Calendar as CalendarIcon,
+  CheckCircle,
+  Clock,
+  Search,
+  Plus,
+  ChevronLeft,
   ChevronRight,
   Target,
   Home as HomeIcon,
@@ -80,8 +80,8 @@ export default function Home() {
       await fetch('http://localhost:3001/api/todos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title: newTodoTitle, 
+        body: JSON.stringify({
+          title: newTodoTitle,
           dueDate: newTodoDate,
           description: newTodoDesc,
           tags: tagsArray,
@@ -149,7 +149,7 @@ export default function Home() {
     return t.dueDate === selectedDate;
   });
   const remainingTodosCount = data.todos.filter(t => !t.completed).length;
-  const completedPercentage = data.todos.length > 0 ? Math.round((data.todos.filter(t => t.completed).length / data.todos.length) * 100) : 0;
+  // Use length for badge counts if needed, but let's stick to the sidebar logic for now
 
   // Analysis Page Data
   const siteBreakdown = data?.siteBreakdown || [];
@@ -179,7 +179,7 @@ export default function Home() {
           <Clock size={32} />
           <span>TaskFlow</span>
         </div>
-        
+
         <button className="btn-new-task-sidebar mb-2" onClick={() => setIsTaskModalOpen(true)}>
           <Plus size={18} />
           <span>新規タスク作成</span>
@@ -208,7 +208,7 @@ export default function Home() {
         <header className="top-header">
           <div className="header-left"></div>
           <div className="header-right" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-             <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5244e1', fontWeight: 800, fontSize: '0.8rem' }}>M</div>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5244e1', fontWeight: 800, fontSize: '0.8rem' }}>M</div>
           </div>
         </header>
 
@@ -231,7 +231,7 @@ export default function Home() {
                     <div className="card-header">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ background: '#5244e1', padding: '6px', borderRadius: '8px', color: 'white' }}>
-                           <FileText size={18} />
+                          <FileText size={18} />
                         </div>
                         <h2>今日のタスク</h2>
                       </div>
@@ -247,8 +247,8 @@ export default function Home() {
                           <div className="todo-content-wrapper" style={{ flex: 1 }}>
                             <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
                             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                               {todo.tags?.map(tag => <span key={tag} className="tag" style={{ background: '#e0e7ff', color: '#5244e1', textTransform: 'uppercase' }}>{tag}</span>)}
-                               <span className="text-muted" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem' }}><Clock size={12} /> 10:00 AM</span>
+                              {todo.tags?.map(tag => <span key={tag} className="tag" style={{ background: '#e0e7ff', color: '#5244e1', textTransform: 'uppercase' }}>{tag}</span>)}
+                              <span className="text-muted" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem' }}><Clock size={12} /> 10:00 AM</span>
                             </div>
                             {todo.description && <div className="todo-description text-muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{todo.description}</div>}
                           </div>
@@ -260,9 +260,9 @@ export default function Home() {
                       ))}
                       {filteredTodos.length === 0 && <li className="text-muted text-center py-4">この日のタスクはありません。</li>}
                       <div className="mt-2 text-center">
-                         <button className="text-muted cursor-pointer" onClick={() => setIsTaskModalOpen(true)} style={{ background: 'transparent', border: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}>
-                            <Plus size={16} /> タスクを追加
-                         </button>
+                        <button className="text-muted cursor-pointer" onClick={() => setIsTaskModalOpen(true)} style={{ background: 'transparent', border: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}>
+                          <Plus size={16} /> タスクを追加
+                        </button>
                       </div>
                     </ul>
                   </section>
@@ -272,9 +272,9 @@ export default function Home() {
                 <div className="dashboard-right">
                   <section className="glass-card mb-2" style={{ padding: 0, overflow: 'hidden' }}>
                     <div style={{ background: '#5244e1', color: 'white', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                       <ChevronLeft size={20} className="cursor-pointer" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} />
-                       <span style={{ fontWeight: 800 }}>{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
-                       <ChevronRight size={20} className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
+                      <ChevronLeft size={20} className="cursor-pointer" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} />
+                      <span style={{ fontWeight: 800 }}>{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
+                      <ChevronRight size={20} className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
                     </div>
                     <div style={{ padding: '1.5rem' }}>
                       <div className="calendar-grid">
@@ -286,8 +286,8 @@ export default function Home() {
                           const isActive = selectedDate === dateStr;
                           const hasTodos = todosOnDay(day).length > 0;
                           return (
-                            <div 
-                              key={idx} 
+                            <div
+                              key={idx}
                               className={`calendar-cell ${isActive ? 'active' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`}
                               onClick={() => setSelectedDate(dateStr)}
                               style={{ color: !isSameMonth(day, currentMonth) ? '#ccc' : 'inherit' }}
@@ -303,8 +303,8 @@ export default function Home() {
 
                   <section className="score-summary-card" style={{ background: '#e0e7ff', color: '#5244e1' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                       <Target size={20} />
-                       <h2 style={{ margin: 0, fontSize: '1rem', color: '#5244e1' }}>プロダクティビティスコア</h2>
+                      <Target size={20} />
+                      <h2 style={{ margin: 0, fontSize: '1rem', color: '#5244e1' }}>プロダクティビティスコア</h2>
                     </div>
                     <div className="progress-bar" style={{ background: 'rgba(82, 68, 225, 0.1)' }}>
                       <div className="progress-fill" style={{ width: `${completedPercentage}%`, background: '#5244e1' }}></div>
@@ -313,16 +313,16 @@ export default function Home() {
                   </section>
 
                   <section className="glass-card">
-                     <div className="card-header">
-                       <h2>スコア履歴</h2>
-                     </div>
-                     <div style={{ height: 150 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={chartData}>
-                            <Line type="monotone" dataKey="score" stroke="#5244e1" strokeWidth={3} dot={false} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                     </div>
+                    <div className="card-header">
+                      <h2>スコア履歴</h2>
+                    </div>
+                    <div style={{ height: 150 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData}>
+                          <Line type="monotone" dataKey="score" stroke="#5244e1" strokeWidth={3} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </section>
                 </div>
               </div>
@@ -376,9 +376,9 @@ export default function Home() {
                         <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
                         <XAxis type="number" hide />
                         <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                        <Tooltip 
-                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                           formatter={(value) => [`${value} min`, 'Usage Time']}
+                        <Tooltip
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                          formatter={(value) => [`${value} min`, 'Usage Time']}
                         />
                         <Bar dataKey="minutes" radius={[0, 4, 4, 0]} barSize={24}>
                           {barChartData.map((entry, index) => (
@@ -425,9 +425,9 @@ export default function Home() {
                               </div>
                             </td>
                             <td>
-                               <button className="btn-domain-action" onClick={() => window.open(`https://${site.domain}`, '_blank')}>
-                                 <ExternalLink size={14} />
-                               </button>
+                              <button className="btn-domain-action" onClick={() => window.open(`https://${site.domain}`, '_blank')}>
+                                <ExternalLink size={14} />
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -442,12 +442,12 @@ export default function Home() {
           {activeTab === 'calendar' && (
             <div className="detailed-calendar">
               <div className="card-header">
-                 <h2>カレンダー</h2>
-                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                     <ChevronLeft className="cursor-pointer" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} />
-                     <span style={{ fontWeight: 800, fontSize: '1.2rem' }}>{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
-                     <ChevronRight className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
-                 </div>
+                <h2>カレンダー</h2>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                  <ChevronLeft className="cursor-pointer" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} />
+                  <span style={{ fontWeight: 800, fontSize: '1.2rem' }}>{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
+                  <ChevronRight className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
+                </div>
               </div>
               <div className="full-calendar-grid">
                 {['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'].map(d => (
@@ -457,7 +457,7 @@ export default function Home() {
                   const dayTodos = todosOnDay(day);
                   return (
                     <div key={idx} className={`full-calendar-cell ${!isSameMonth(day, currentMonth) ? 'bg-slate-50 opacity-40' : ''}`} onClick={() => { setSelectedDate(format(day, 'yyyy-MM-dd')); setActiveTab('dashboard'); }}>
-                      <div className="full-calendar-day-num">{format(day, 'd')}</div>
+                      <div className={`full-calendar-day-num ${isSameDay(day, new Date()) ? 'today-circle' : ''}`}>{format(day, 'd')}</div>
                       <div className="full-calendar-tasks">
                         {dayTodos.slice(0, 3).map(todo => (
                           <div key={todo.id} className={`calendar-task-badge ${todo.completed ? 'completed' : ''}`}>
