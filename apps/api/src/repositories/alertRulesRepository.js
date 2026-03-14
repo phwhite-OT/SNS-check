@@ -5,6 +5,7 @@
  */
 const { supabase } = require('../config/supabase');
 
+// ユーザーのアラートルールを取得
 async function listAlertRulesByUser(userId) {
     const { data, error } = await supabase
         .from('alert_rules')
@@ -17,6 +18,7 @@ async function listAlertRulesByUser(userId) {
     return data || [];
 }
 
+// 新しいアラートルールを追加
 async function insertAlertRule(userId, targetDomain, thresholdSec = 900) {
     const { data, error } = await supabase
         .from('alert_rules')
@@ -33,10 +35,11 @@ async function insertAlertRule(userId, targetDomain, thresholdSec = 900) {
     return data;
 }
 
+// アラートルールを削除(論理削除で `enabled=false` にする)
 async function deleteAlertRuleByDomain(userId, targetDomain) {
     const { error } = await supabase
         .from('alert_rules')
-        .delete()
+        .update({ enabled: false })
         .eq('user_id', userId)
         .eq('target_domain', targetDomain);
 
