@@ -5,6 +5,8 @@
  */
 const { supabase } = require('../config/supabase');
 
+
+// 新しいタブセッションを記録
 async function insertTabSession(session) {
     const { data, error } = await supabase
         .from('tab_sessions')
@@ -16,6 +18,7 @@ async function insertTabSession(session) {
     return data;
 }
 
+// ユーザーのタブセッションを取得
 async function listTabSessionsByUser(userId) {
     const { data, error } = await supabase
         .from('tab_sessions')

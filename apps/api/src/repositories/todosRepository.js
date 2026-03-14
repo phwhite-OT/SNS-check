@@ -7,6 +7,8 @@
  */
 const { supabase } = require('../config/supabase');
 
+
+// ユーザーのTODOリストを取得
 async function listTodosByUser(userId) {
     const { data, error } = await supabase
         .from('todos')
@@ -18,6 +20,7 @@ async function listTodosByUser(userId) {
     return data || [];
 }
 
+// 新しいTODOを作成
 async function createTodo(userId, title) {
     const { data, error } = await supabase
         .from('todos')
@@ -33,6 +36,9 @@ async function createTodo(userId, title) {
     return data;
 }
 
+
+
+// TODOを更新
 async function updateTodo(userId, id, update) {
     const { data, error } = await supabase
         .from('todos')
@@ -46,6 +52,7 @@ async function updateTodo(userId, id, update) {
     return data;
 }
 
+// TODOを削除
 async function deleteTodo(userId, id) {
     const { error } = await supabase
         .from('todos')
