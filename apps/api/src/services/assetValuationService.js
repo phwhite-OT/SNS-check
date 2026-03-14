@@ -4,6 +4,7 @@
 const { env } = require('../config/env');
 const btcPriceHistoryRepository = require('../repositories/btcPriceHistoryRepository');
 const wasteCostSnapshotsRepository = require('../repositories/wasteCostSnapshotsRepository');
+const profilesRepository = require('../repositories/profilesRepository');
 
 async function fetchBtcJpyFromCoinGecko() {
     const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=jpy');
@@ -71,14 +72,19 @@ async function buildAssetMetrics(userId, totalTimeSeconds) {
     const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const periodEnd = now.toISOString();
 
-    await wasteCostSnapshotsRepository.insertWasteCostSnapshot({
-        user_id: userId,
-        period_start: periodStart,
-        period_end: periodEnd,
-        wasted_seconds: totalTimeSeconds,
-        btc_price_jpy: btc.priceJpy,
-        lost_amount_jpy: lostAmountJpy,
-    });
+    const profileExists = await profilesRepository.ensureProfile(userId);
+    if (profileExists) {
+        await wasteCostSnapshotsRepository.insertWasteCostSnapshot({
+            user_id: userId,
+            period_start: periodStart,
+            period_end: periodEnd,
+            wasted_seconds: totalTimeSeconds,
+            btc_price_jpy: btc.priceJpy,
+            lost_amount_jpy: lostAmountJpy,
+        });
+    } else {
+        console.warn(`Skipping waste cost snapshot for user ${userId} due to missing profile.`);
+    }
 
     return {
         jpy: lostAmountJpy,
