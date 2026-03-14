@@ -23,7 +23,7 @@ NEXT_PUBLIC_API_BASE=https://your-api.example.com/api
 
 ```bash
 cd apps/web
-npx wrangler@latest login
+npx -y wrangler@latest login
 ```
 
 ## 4. Build for Workers
@@ -58,7 +58,7 @@ SUPABASE_URL = "https://your-project.supabase.co"
 For sensitive values used server-side, set secrets:
 
 ```bash
-npx wrangler@latest secret put SUPABASE_SERVICE_ROLE_KEY
+npx -y wrangler@latest secret put SUPABASE_SERVICE_ROLE_KEY
 ```
 
 ## Notes
