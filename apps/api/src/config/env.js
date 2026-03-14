@@ -5,7 +5,8 @@
  *
  * 新しい設定を追加するときは、まずこのファイルに項目を追加する。
  */
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const env = {
     PORT: Number(process.env.PORT || 3001),

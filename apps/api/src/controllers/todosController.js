@@ -5,9 +5,16 @@
  * - `x-user-id` 未指定時は `defaultUserId` を使用
  */
 const todosService = require('../services/todosService');
+const { httpError } = require('../utils/httpError');
+
+const INVALID_DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 function getUserId(req) {
-    return req.header('x-user-id') || req.app.locals.defaultUserId;
+    const userId = req.header('x-user-id') || req.app.locals.defaultUserId;
+    if (!userId || userId === INVALID_DEFAULT_USER_ID) {
+        throw httpError(401, 'x-user-id を指定してください（有効な profiles.id が必要です）');
+    }
+    return userId;
 }
 
 // TODOの一覧を取得

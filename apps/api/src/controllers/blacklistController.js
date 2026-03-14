@@ -5,10 +5,17 @@
  * - 実際の業務ロジックはservice層へ委譲
  */
 const blacklistService = require('../services/blacklistService');
+const { httpError } = require('../utils/httpError');
+
+const INVALID_DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 //  `x-user-id` ヘッダーからユーザーIDを取得。未指定の場合は `defaultUserId` を使用
 function getUserId(req) {
-    return req.header('x-user-id') || req.app.locals.defaultUserId;
+    const userId = req.header('x-user-id') || req.app.locals.defaultUserId;
+    if (!userId || userId === INVALID_DEFAULT_USER_ID) {
+        throw httpError(401, 'x-user-id を指定してください（有効な profiles.id が必要です）');
+    }
+    return userId;
 }
 
 // ブラックリストの一覧を取得
