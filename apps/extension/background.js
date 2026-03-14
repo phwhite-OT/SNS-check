@@ -106,9 +106,9 @@ function saveTime(site, seconds) {
 }
 
 // ⏰ --- 定期的にバックエンド（API）にデータを送信・取得する設定 ---
-// 「1分ごと」に同期、「5分ごと」にブラックリスト更新
-chrome.alarms.create('syncTime', { periodInMinutes: 1 });
-chrome.alarms.create('fetchBlacklist', { periodInMinutes: 5 });
+// 「5秒ごと」に同期、「1分ごと」にブラックリスト更新
+chrome.alarms.create('syncTime', { periodInMinutes: 1/12 });
+chrome.alarms.create('fetchBlacklist', { periodInMinutes: 1 });
 
 // アラームが鳴った時の処理
 chrome.alarms.onAlarm.addListener((alarm) => {
