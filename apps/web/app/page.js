@@ -1,186 +1,375 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer
+} from 'recharts';
 
-// この Home() という関数がダッシュボードのメイン画面を作っています
 export default function Home() {
-  // 📦 画面に表示する状態（データ）を保存する箱（State）を用意します
-  const [dashboardData, setDashboardData] = useState(null); // 取得したデータを入れる箱
-  const [isLoading, setIsLoading] = useState(true);         // 読み込み中かどうかを判定するフラグ
-  const [error, setError] = useState(null);                 // エラーが起きた時のメッセージを入れる箱
+  const [data, setData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // ⚡ 画面が開いた時（また、5秒ごと）に実行される処理
+  // Form states
+  const [newTodoTitle, setNewTodoTitle] = useState('');
+  const [newDomain, setNewDomain] = useState('');
+
+  // Fetch data
+  const fetchData = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/dashboard');
+      if (!res.ok) throw new Error('API request failed');
+      const json = await res.json();
+      setData(json);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError('APIに接続できません。バックエンドが起動しているか確認してください。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // --- APIからデータを取ってくる関数 ---
-    const fetchData = async () => {
-      try {
-        // バックエンドAPIに「データちょうだい！」とお願いする
-        const res = await fetch('http://localhost:3001/api/dashboard');
-
-        // もしうまく繋がらなかったらエラーにする
-        if (!res.ok) throw new Error('API request failed');
-
-        // 受け取ったデータをJSONという形式に変換して、箱（dashboardData）に入れる
-        const data = await res.json();
-        setDashboardData(data);
-        setError(null); // エラーなし！
-      } catch (err) {
-        console.error(err);
-        // エラー内容を箱に入れて、画面に表示させるようにする
-        setError('APIが見つかりません。バックエンドが起動しているか確認してください。');
-      } finally {
-        // 成功しても失敗しても、「読み込み中」状態は終わらせる
-        setIsLoading(false);
-      }
-    };
-
-    // 1. まず最初に1回データを取得する
     fetchData();
-
-    // 2. 5秒（5000ミリ秒）ごとに同じ取得作業をポロポロ繰り返す（更新させる）
     const intervalId = setInterval(fetchData, 5000);
-
-    // 画面を閉じた時にこのインターバルも一緒に片付ける
     return () => clearInterval(intervalId);
   }, []);
 
-  // ⏰ --- 秒数を「○時間○分○秒」という見やすい文字に変える便利関数 ---
-  const formatTime = (seconds) => {
-    const h = Math.floor(seconds / 3600);           // 時間
-    const m = Math.floor((seconds % 3600) / 60);    // 分
-    const s = seconds % 60;                         // 秒
-
-    if (h > 0) return `${h}時間 ${m}分`;
-    if (m > 0) return `${m}分 ${s}秒`;
-    return `${s}秒`;
+  // ToDo Actions
+  const handleAddTodo = async (e) => {
+    e.preventDefault();
+    if (!newTodoTitle.trim()) return;
+    try {
+      await fetch('http://localhost:3001/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTodoTitle })
+      });
+      setNewTodoTitle('');
+      fetchData();
+    } catch (e) { console.error(e); }
   };
 
-  // --- 🎨 状態によって画面の表示を切り替える ---
+  const handleToggleTodo = async (id, currentStatus) => {
+    try {
+      await fetch(`http://localhost:3001/api/todos/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed: !currentStatus })
+      });
+      fetchData();
+    } catch (e) { console.error(e); }
+  };
 
-  // データ取得中の時はこの文字だけ表示する
-  if (isLoading) return <div className="loading">Loading assets...</div>;
+  const handleDeleteTodo = async (id) => {
+    try {
+      await fetch(`http://localhost:3001/api/todos/${id}`, {
+        method: 'DELETE'
+      });
+      fetchData();
+    } catch (e) { console.error(e); }
+  };
 
-  // エラーが起きていたらエラーメッセージだけ表示する
+  // Blacklist Actions
+  const handleAddBlacklist = async (e) => {
+    e.preventDefault();
+    if (!newDomain.trim()) return;
+    try {
+      // 簡易的にnameはドメインの最初の部分とする
+      const name = newDomain.split('.')[0] || newDomain;
+      await fetch('http://localhost:3001/api/blacklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: newDomain, name })
+      });
+      setNewDomain('');
+      fetchData();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteBlacklist = async (domain) => {
+    try {
+      await fetch(`http://localhost:3001/api/blacklist/${domain}`, {
+        method: 'DELETE'
+      });
+      fetchData();
+    } catch (e) { console.error(e); }
+  };
+
+  if (isLoading) return <div className="loading">Loading dashboard...</div>;
   if (error) return <div className="error-card">{error}</div>;
+  if (!data) return null;
 
-  // 問題なければ、いよいよダッシュボードの中身を作って表示します！
+  // Format history for chart
+  const chartData = data.history.map(item => ({
+    time: new Date(item.timestamp).toLocaleTimeString(),
+    score: item.score
+  }));
+
   return (
-    <div className="dashboard-grid">
+    <div className="dashboard-container">
 
-      {/* --- 1つ目のカード：使った総時間 --- */}
-      <div className="card overview-card glass-panel">
-        <h2>今日SNSに使った総時間</h2>
-        <div className="huge-time">
-          {/* ここでformatTime関数を使って表示 */}
-          {formatTime(dashboardData.totalTimeSeconds)}
+      {/* 1. Score & Graph Section */}
+      <section className="main-section glass-panel">
+        <div className="score-header">
+          <h2>あなたのHP (Current Score)</h2>
+          <div className="huge-score">{data.score}</div>
         </div>
-      </div>
+        <div className="chart-container">
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+              <XAxis dataKey="time" stroke="#aaa" />
+              <YAxis domain={['auto', 'auto']} stroke="#aaa" />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }}
+                itemStyle={{ color: '#4ade80' }}
+              />
+              <Line
+                type="stepAfter"
+                dataKey="score"
+                stroke="#4ade80"
+                strokeWidth={3}
+                dot={{ r: 4, fill: '#4ade80' }}
+                activeDot={{ r: 8 }}
+                isAnimationActive={true}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
 
-      {/* --- 2つ目のカード：失ったお金の価値💰 --- */}
-      <div className="card conversion-card glass-panel">
-        <h2>失った資産 (仮定時給換算)</h2>
-        {/* 円換算 (toLocaleString()でカンマを入れる) */}
-        <div className="asset-value jpy">
-          - ¥ {dashboardData.assets.jpy.toLocaleString()}
-        </div>
-        {/* ビットコイン換算 */}
-        <div className="asset-value btc">
-          - {dashboardData.assets.btc} BTC
-        </div>
-      </div>
+      <div className="bottom-grid">
+        {/* 2. ToDo List Section */}
+        <section className="todo-section glass-panel">
+          <h2>🏆 クエスト (ToDo List)</h2>
+          <p className="hint">タスクを完了してHPを回復しよう！ (+50 HP)</p>
 
-      {/* --- 3つ目のカード：各SNSごとの内訳ランキングリスト --- */}
-      <div className="card breakdown-card glass-panel">
-        <h2>サイト別消費時間</h2>
-        <ul className="site-list">
-          {/* dashboardData.timeDataの中身（youtube, xなど）をループして作る */}
-          {Object.entries(dashboardData.timeData)
-            .filter(([_, time]) => time > 0) // 0秒のサイトは表示しない
-            .map(([site, time]) => (
-              // 各サイトの表示行
-              <li key={site} className="site-item">
-                {/* 頭文字を大文字にする */}
-                <span className="site-name">
-                  {site.charAt(0).toUpperCase() + site.slice(1)}
-                </span>
-                {/* 時間 */}
-                <span className="site-time">{formatTime(time)}</span>
+          <form className="add-form" onSubmit={handleAddTodo}>
+            <input
+              type="text"
+              value={newTodoTitle}
+              onChange={(e) => setNewTodoTitle(e.target.value)}
+              placeholder="新しいタスクを入力..."
+              className="input-field"
+            />
+            <button type="submit" className="btn-primary">追加</button>
+          </form>
+
+          <ul className="todo-list">
+            {data.todos.map(todo => (
+              <li key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
+                <label className="checkbox-container">
+                  <input
+                    type="checkbox"
+                    checked={todo.completed}
+                    onChange={() => handleToggleTodo(todo.id, todo.completed)}
+                  />
+                  <span className="checkmark"></span>
+                  <span className="todo-text">{todo.title}</span>
+                </label>
+                <button className="btn-delete" onClick={() => handleDeleteTodo(todo.id)}>✕</button>
               </li>
             ))}
+            {data.todos.length === 0 && <li className="empty-msg">タスクがありません。</li>}
+          </ul>
+        </section>
 
-          {/* もし全部0秒だったら、このメッセージを出す */}
-          {Object.values(dashboardData.timeData).every(v => v === 0) && (
-            <li className="no-data">まだデータがありません。監視対象のSNSを閲覧するとここに表示されます。</li>
-          )}
-        </ul>
+        {/* 3. Blacklist Section */}
+        <section className="blacklist-section glass-panel">
+          <h2>☠️ 毒沼 (Blacklist)</h2>
+          <p className="hint">これらのサイトを見るとHPが減ります...</p>
+
+          <form className="add-form" onSubmit={handleAddBlacklist}>
+            <input
+              type="text"
+              value={newDomain}
+              onChange={(e) => setNewDomain(e.target.value)}
+              placeholder="例: netflix.com"
+              className="input-field"
+            />
+            <button type="submit" className="btn-danger">追加</button>
+          </form>
+
+          <ul className="blacklist">
+            {data.blacklist.map(b => (
+              <li key={b.domain} className="blacklist-item">
+                <span className="domain-name">{b.domain}</span>
+                <button className="btn-delete" onClick={() => handleDeleteBlacklist(b.domain)}>削除</button>
+              </li>
+            ))}
+            {data.blacklist.length === 0 && <li className="empty-msg">監視対象がありません。</li>}
+          </ul>
+        </section>
       </div>
 
-      {/* 👗 ここから下はこの画面だけで使う専用のCSS（デザインルール）です */}
       <style jsx>{`
-        .dashboard-grid {
+        .dashboard-container {
+          display: flex;
+          flex-direction: column;
+          gap: 2rem;
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+        .bottom-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
           gap: 2rem;
         }
         .glass-panel {
           background: rgba(30, 41, 59, 0.6);
           backdrop-filter: blur(12px);
           border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 2rem;
+          border-radius: 16px;
         }
-        .huge-time {
-          font-size: 3.5rem;
+        .main-section {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+        .score-header {
+          text-align: center;
+        }
+        .huge-score {
+          font-size: 5rem;
           font-weight: 900;
-          color: var(--text-main);
+          color: #4ade80;
+          text-shadow: 0 0 20px rgba(74, 222, 128, 0.4);
+          margin-top: 10px;
+        }
+        .chart-container {
           margin-top: 1rem;
+          background: rgba(0,0,0,0.2);
+          border-radius: 12px;
+          padding: 1rem 1rem 1rem 0;
         }
-        .asset-value {
-          margin-top: 1rem;
-        }
-        .jpy {
-          font-size: 3rem;
-          font-weight: 800;
-          color: var(--danger);
-        }
-        .btc {
+        h2 {
+          color: #f8fafc;
+          margin-bottom: 0.5rem;
           font-size: 1.5rem;
-          color: #f59e0b;
+          margin-top: 0;
         }
-        .site-list {
+        .hint {
+          color: #94a3b8;
+          font-size: 0.9rem;
+          margin-bottom: 1.5rem;
+        }
+        .add-form {
+          display: flex;
+          gap: 0.5rem;
+          margin-bottom: 1.5rem;
+        }
+        .input-field {
+          flex: 1;
+          padding: 0.75rem 1rem;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.2);
+          background: rgba(0,0,0,0.3);
+          color: white;
+          font-size: 1rem;
+        }
+        .input-field:focus {
+          outline: none;
+          border-color: #3b82f6;
+        }
+        .btn-primary {
+          background: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 0 1.5rem;
+          font-weight: bold;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-danger {
+          background: #ef4444;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          padding: 0 1.5rem;
+          font-weight: bold;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+        .btn-danger:hover { background: #dc2626; }
+        
+        .todo-list, .blacklist {
           list-style: none;
           padding: 0;
-          margin: 1.5rem 0 0 0;
-        }
-        .site-item {
           display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+          margin: 0;
+        }
+        .todo-item, .blacklist-item {
+          display: flex;
+          align-items: center;
           justify-content: space-between;
-          padding: 1.25rem;
           background: rgba(0,0,0,0.2);
-          margin-bottom: 0.75rem;
+          padding: 1rem;
           border-radius: 8px;
+          transition: all 0.2s;
         }
-        .site-name {
-          font-weight: 600;
-          color: var(--accent);
+        .todo-item.completed {
+          opacity: 0.5;
+        }
+        .todo-item.completed .todo-text {
+          text-decoration: line-through;
+          color: #94a3b8;
+        }
+        .checkbox-container {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          cursor: pointer;
+          flex: 1;
+        }
+        .todo-text {
           font-size: 1.1rem;
+          color: #f1f5f9;
+          transition: color 0.2s;
         }
-        .site-time {
-          font-weight: bold;
-          color: var(--text-main);
+        .domain-name {
+          font-size: 1.1rem;
+          color: #fca5a5;
         }
-        .no-data {
-          color: var(--text-muted);
+        .btn-delete {
+          background: transparent;
+          color: #ef4444;
+          border: 1px solid #ef4444;
+          border-radius: 6px;
+          padding: 0.25rem 0.5rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .btn-delete:hover {
+          background: #ef4444;
+          color: white;
+        }
+        .empty-msg {
           text-align: center;
+          color: #64748b;
           padding: 2rem;
         }
         .loading {
           text-align: center;
           font-size: 1.5rem;
-          color: var(--text-muted);
+          color: #94a3b8;
           padding: 5rem;
         }
         .error-card {
-           background: rgba(239, 68, 68, 0.1);
-          color: var(--danger);
+          background: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
           padding: 2rem;
           border-radius: 12px;
           border: 1px solid rgba(239, 68, 68, 0.2);

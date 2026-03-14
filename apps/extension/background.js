@@ -1,16 +1,29 @@
-// 🎯 計測したい対象のSNSサイト一覧
-// 'URLの一部': '保存する時のキー名'
-const TARGET_SITES = {
-    'youtube.com': 'youtube',
-    'twitter.com': 'x',
-    'x.com': 'x',
-    'instagram.com': 'instagram',
-    'tiktok.com': 'tiktok'
-};
-
 // 📡 APIサーバーの送信先アドレス
-// [TODO]: 本番環境や別のPCで動かすときはここを変更します
-const API_ENDPOINT = 'http://localhost:3001/api/time';
+const API_BASE = 'http://localhost:3001/api';
+const API_ENDPOINT = `${API_BASE}/time`;
+
+// 動的なターゲットサイト一覧
+let targetSites = {};
+
+// バックエンドからブラックリストを取得する関数
+async function fetchBlacklist() {
+    try {
+        const res = await fetch(`${API_BASE}/blacklist`);
+        if (res.ok) {
+            const list = await res.json();
+            const newSites = {};
+            list.forEach(item => {
+                newSites[item.domain] = item.name;
+            });
+            targetSites = newSites;
+        }
+    } catch (e) {
+        console.error('Failed to fetch blacklist', e);
+    }
+}
+
+// 起動時にブラックリストを取得
+fetchBlacklist();
 
 // --- 状態を管理するための変数 ---
 let activeTabId = null; // 今見ているタブのID
@@ -68,8 +81,8 @@ function handleTabSwitch(tabId) {
             try {
                 // URLを解析します
                 const url = new URL(tab.url);
-                // 計測したいサイト（TARGET_SITES）と一致するかパトロール
-                for (const [domain, siteName] of Object.entries(TARGET_SITES)) {
+                // 計測したいサイト（targetSites）と一致するかパトロール
+                for (const [domain, siteName] of Object.entries(targetSites)) {
                     if (url.hostname.includes(domain)) {
                         activeSite = siteName;    // ターゲット発見！サイト名を記録。
                         startTime = Date.now();   // 見始めた時間を記録。タイマースタート！
@@ -92,14 +105,17 @@ function saveTime(site, seconds) {
     });
 }
 
-// ⏰ --- 定期的にバックエンド（API）にデータを送信する設定 ---
-// 「1分ごと」にアラームをセットします
+// ⏰ --- 定期的にバックエンド（API）にデータを送信・取得する設定 ---
+// 「1分ごと」に同期、「5分ごと」にブラックリスト更新
 chrome.alarms.create('syncTime', { periodInMinutes: 1 });
+chrome.alarms.create('fetchBlacklist', { periodInMinutes: 5 });
 
-// アラームが鳴ったら syncToApi() を実行する
+// アラームが鳴った時の処理
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'syncTime') {
         syncToApi();
+    } else if (alarm.name === 'fetchBlacklist') {
+        fetchBlacklist();
     }
 });
 
