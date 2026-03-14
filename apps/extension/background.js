@@ -1,6 +1,8 @@
 // 📡 APIサーバーの送信先アドレス
 const API_BASE = 'http://localhost:3001/api';
 const API_ENDPOINT = `${API_BASE}/time`;
+// TODO: Supabaseの profiles.id（実在UUID）に置き換えてください。
+const X_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
 // 動的なターゲットサイト一覧
 let targetSites = {};
@@ -8,7 +10,11 @@ let targetSites = {};
 // バックエンドからブラックリストを取得する関数
 async function fetchBlacklist() {
     try {
-        const res = await fetch(`${API_BASE}/blacklist`);
+        const res = await fetch(`${API_BASE}/blacklist`, {
+            headers: {
+                'x-user-id': X_USER_ID,
+            },
+        });
         if (res.ok) {
             const list = await res.json();
             const newSites = {};
@@ -107,7 +113,7 @@ function saveTime(site, seconds) {
 
 // ⏰ --- 定期的にバックエンド（API）にデータを送信・取得する設定 ---
 // 「5秒ごと」に同期、「1分ごと」にブラックリスト更新
-chrome.alarms.create('syncTime', { periodInMinutes: 1/12 });
+chrome.alarms.create('syncTime', { periodInMinutes: 1 / 12 });
 chrome.alarms.create('fetchBlacklist', { periodInMinutes: 1 });
 
 // アラームが鳴った時の処理
@@ -137,7 +143,8 @@ function syncToApi() {
                 fetch(API_ENDPOINT, {
                     method: 'POST', // データを「送る」時はPOSTを使います
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'x-user-id': X_USER_ID,
                     },
                     body: JSON.stringify({ site, time })
                 })

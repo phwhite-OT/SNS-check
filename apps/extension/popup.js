@@ -1,5 +1,7 @@
 // APIサーバーからデータを取得するためのURL
 const API_DASHBOARD = 'http://localhost:3001/api/dashboard';
+// TODO: Supabaseの profiles.id（実在UUID）に置き換えてください。
+const X_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
 // 新しいタブでWebダッシュボード（localhost:3000）を開きます
 document.getElementById('dashboardBtn').addEventListener('click', () => {
@@ -16,7 +18,11 @@ function formatTime(seconds) {
 }
 
 // 🌐 APIにアクセスして最新のデータを取得する
-fetch(API_DASHBOARD)
+fetch(API_DASHBOARD, {
+    headers: {
+        'x-user-id': X_USER_ID,
+    },
+})
     .then(res => res.json())
     .then(data => {
         const statsDiv = document.getElementById('stats');
