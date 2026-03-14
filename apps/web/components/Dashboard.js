@@ -29,7 +29,7 @@ import {
   ExternalLink,
   LogOut
 } from 'lucide-react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
 const API_BASE = 'http://localhost:3001/api';
@@ -51,6 +51,10 @@ export default function Dashboard({ user, onLogout }) {
   const [newTodoPriority, setNewTodoPriority] = useState('medium');
   const [newTodoDate, setNewTodoDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  
+  // Task detail states
+  const [viewingTask, setViewingTask] = useState(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // Fetch data (with user ID from auth)
   const fetchData = async () => {
@@ -177,9 +181,28 @@ export default function Dashboard({ user, onLogout }) {
     score: item.score
   }));
 
-  const filteredTodos = data.todos.filter(t => {
-    if (!t.dueDate) return selectedDate === format(new Date(), 'yyyy-MM-dd');
-    return t.dueDate === selectedDate;
+  const getRelativeDateLabel = (dateStr) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(date);
+    target.setHours(0, 0, 0, 0);
+
+    if (isSameDay(target, today)) return { label: '今日', className: 'today' };
+    if (isSameDay(target, addDays(today, 1))) return { label: '明日', className: 'tomorrow' };
+    if (isSameDay(target, subDays(today, 1))) return { label: '昨日', className: 'overdue' };
+    if (target < today) return { label: format(target, 'M/d'), className: 'overdue' };
+    return { label: format(target, 'M/d'), className: 'upcoming' };
+  };
+
+  // 全てのタスクを表示。未完了を優先し、期限日でソート
+  const filteredTodos = [...data.todos].sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    if (!a.dueDate && !b.dueDate) return 0;
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
+    return new Date(a.dueDate) - new Date(b.dueDate);
   });
   const remainingTodosCount = data.todos.filter(t => !t.completed).length;
   const completedPercentage = data.todos.length > 0 ? Math.round((data.todos.filter(t => t.completed).length / data.todos.length) * 100) : 0;
@@ -222,7 +245,7 @@ export default function Dashboard({ user, onLogout }) {
         <nav className="sidebar-nav">
           <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
             <HomeIcon size={18} />
-            <span>今日</span>
+            <span>全てのタスク</span>
             {remainingTodosCount > 0 && <span style={{ marginLeft: 'auto', background: '#5244e1', color: 'white', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '10px' }}>{remainingTodosCount}</span>}
           </div>
           <div className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
@@ -296,7 +319,7 @@ export default function Dashboard({ user, onLogout }) {
                         <div style={{ background: '#5244e1', padding: '6px', borderRadius: '8px', color: 'white' }}>
                           <FileText size={18} />
                         </div>
-                        <h2>今日のタスク</h2>
+                        <h2>全てのタスク</h2>
                       </div>
                       <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{format(new Date(selectedDate), 'yyyy年 M月 d日', { locale: ja })}</span>
                     </div>
@@ -307,11 +330,25 @@ export default function Dashboard({ user, onLogout }) {
                           <div className="checkbox-custom" onClick={() => handleToggleTodo(todo.id, todo.completed)}>
                             {todo.completed && <CheckCircle size={18} color="white" fill="white" />}
                           </div>
-                          <div className="todo-content-wrapper" style={{ flex: 1 }}>
+                          <div 
+                            className="todo-content-wrapper" 
+                            style={{ flex: 1, cursor: 'pointer' }}
+                            onClick={() => {
+                              setViewingTask(todo);
+                              setIsDetailModalOpen(true);
+                            }}
+                          >
                             <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
                             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                              {todo.tags?.map(tag => <span key={tag} className="tag" style={{ background: '#e0e7ff', color: '#5244e1', textTransform: 'uppercase' }}>{tag}</span>)}
-                              <span className="text-muted" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem' }}><Clock size={12} /> 10:00 AM</span>
+                              {todo.tags?.map(tag => <span key={tag} className="tag" style={{ textTransform: 'uppercase' }}>{tag}</span>)}
+                              {todo.dueDate && (() => {
+                                const rel = getRelativeDateLabel(todo.dueDate);
+                                return (
+                                  <span className={`date-badge ${rel.className}`}>
+                                    <Clock size={12} /> {rel.label}
+                                  </span>
+                                );
+                              })()}
                             </div>
                             {todo.description && <div className="todo-description text-muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{todo.description}</div>}
                           </div>
@@ -347,16 +384,24 @@ export default function Dashboard({ user, onLogout }) {
                         {daysInMonth.map((day, idx) => {
                           const dateStr = format(day, 'yyyy-MM-dd');
                           const isActive = selectedDate === dateStr;
-                          const hasTodos = todosOnDay(day).length > 0;
+                          const dayTodos = todosOnDay(day);
+                          const hasTodos = dayTodos.length > 0;
+                          
+                          // 最高優先度を判定
+                          let maxPriority = 'low';
+                          if (dayTodos.some(t => t.priority === 'high')) maxPriority = 'high';
+                          else if (dayTodos.some(t => t.priority === 'medium')) maxPriority = 'medium';
+
                           return (
                             <div
                               key={idx}
-                              className={`calendar-cell ${isActive ? 'active' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`}
+                              className={`calendar-cell ${isActive ? 'active' : ''} ${isSameDay(day, new Date()) ? 'today' : ''} ${hasTodos ? 'has-tasks' : ''}`}
                               onClick={() => setSelectedDate(dateStr)}
                               style={{ color: !isSameMonth(day, currentMonth) ? '#ccc' : 'inherit' }}
                             >
                               {format(day, 'd')}
-                              {hasTodos && <div className="dot-indicator" style={{ background: isActive ? 'white' : '#ef4444' }}></div>}
+                              {hasTodos && <div className={`task-indicator-dot priority-${maxPriority}`}></div>}
+                              {hasTodos && dayTodos.length > 1 && <div className="task-count-badge-mini">{dayTodos.length}</div>}
                             </div>
                           );
                         })}
@@ -519,11 +564,20 @@ export default function Dashboard({ user, onLogout }) {
                 {daysInMonth.map((day, idx) => {
                   const dayTodos = todosOnDay(day);
                   return (
-                    <div key={idx} className={`full-calendar-cell ${!isSameMonth(day, currentMonth) ? 'bg-slate-50 opacity-40' : ''}`} onClick={() => { setSelectedDate(format(day, 'yyyy-MM-dd')); setActiveTab('dashboard'); }}>
+                    <div key={idx} className={`full-calendar-cell ${!isSameMonth(day, currentMonth) ? 'bg-slate-50 opacity-40' : ''}`} onClick={() => { setSelectedDate(format(day, 'yyyy-MM-dd')); }}>
                       <div className="full-calendar-day-num">{format(day, 'd')}</div>
                       <div className="full-calendar-tasks">
                         {dayTodos.slice(0, 3).map(todo => (
-                          <div key={todo.id} className={`calendar-task-badge ${todo.completed ? 'completed' : ''}`}>
+                          <div 
+                            key={todo.id} 
+                            className={`calendar-task-badge ${todo.completed ? 'completed' : ''}`} 
+                            style={{ borderLeftColor: todo.priority === 'high' ? '#ef4444' : todo.priority === 'medium' ? '#f59e0b' : '#10b981', cursor: 'pointer' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingTask(todo);
+                              setIsDetailModalOpen(true);
+                            }}
+                          >
                             {todo.title}
                           </div>
                         ))}
@@ -578,6 +632,74 @@ export default function Dashboard({ user, onLogout }) {
                 <button type="submit" className="btn-submit">作成</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Task Detail Modal */}
+      {isDetailModalOpen && viewingTask && (
+        <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span className={`priority-badge-${viewingTask.priority}`}>
+                  {viewingTask.priority === 'high' ? '高' : viewingTask.priority === 'low' ? '低' : '中'}
+                </span>
+                <h2 style={{ margin: 0 }}>タスク詳細</h2>
+              </div>
+              <X className="cursor-pointer text-muted" onClick={() => setIsDetailModalOpen(false)} />
+            </div>
+            
+            <div className="task-detail-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div>
+                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>タスク名</label>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '0.4rem' }}>{viewingTask.title}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>期限</label>
+                <div style={{ marginTop: '0.4rem' }}>
+                  {viewingTask.dueDate ? (() => {
+                    const rel = getRelativeDateLabel(viewingTask.dueDate);
+                    return (
+                      <span className={`date-badge ${rel.className}`} style={{ fontSize: '0.9rem', padding: '4px 12px' }}>
+                        <Clock size={14} /> {viewingTask.dueDate} ({rel.label})
+                      </span>
+                    );
+                  })() : <span className="text-muted">未設定</span>}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>詳細</label>
+                <div style={{ marginTop: '0.4rem', color: '#4b5563', lineHeight: 1.6 }}>
+                  {viewingTask.description || <span className="text-muted">（説明はありません）</span>}
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--tf-border)', paddingTop: '1.5rem' }}>
+                <button 
+                  className="btn-cancel" 
+                  style={{ marginRight: 'auto', color: 'var(--tf-accent-red)', borderColor: 'var(--tf-accent-red)' }}
+                  onClick={() => {
+                    handleDeleteTodo(viewingTask.id);
+                    setIsDetailModalOpen(false);
+                  }}
+                >
+                  削除する
+                </button>
+                <button 
+                  className="btn-submit" 
+                  style={{ background: viewingTask.completed ? 'var(--tf-text-muted)' : 'var(--tf-primary)' }}
+                  onClick={() => {
+                    handleToggleTodo(viewingTask.id, viewingTask.completed);
+                    setIsDetailModalOpen(false);
+                  }}
+                >
+                  {viewingTask.completed ? '未完了に戻す' : '完了にする'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
