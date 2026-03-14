@@ -19,12 +19,31 @@ async function getProfileById(userId) {
 async function ensureProfile(userId) {
     const existing = await getProfileById(userId);
     if (!existing) {
+        let email = null;
+
+        try {
+            const { data: authData, error: authError } = await supabase.auth.admin.getUserById(userId);
+            if (authError) {
+                console.error('Failed to load auth user for profile creation:', authError.message);
+            } else {
+                email = authData?.user?.email || null;
+            }
+        } catch (error) {
+            console.error('Unexpected error while loading auth user:', error.message);
+        }
+
+        if (!email) {
+            console.error(`Cannot auto-create profile for user ${userId}: email is missing.`);
+            return false;
+        }
+
         // もしプロフィールがなければ作成を試みる（FK違反を避けるため）
         const { data, error } = await supabase
             .from('profiles')
             .insert({ 
                 id: userId,
-                display_name: 'User', // 必須カラムへのデフォルト値
+                email,
+                display_name: email.split('@')[0] || 'User', // 必須カラムへのデフォルト値
                 timezone: 'UTC'       // 必須カラムへのデフォルト値
             })
             .select('id')

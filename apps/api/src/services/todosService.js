@@ -5,6 +5,7 @@
  */
 const { httpError } = require('../utils/httpError');
 const todosRepository = require('../repositories/todosRepository');
+const profilesRepository = require('../repositories/profilesRepository');
 const { mapTodoRowToResponse, mapTodoPatchToUpdate } = require('../models/todoModel');
 
 // ユーザーのTodo一覧を取得
@@ -18,6 +19,11 @@ async function addTodo(userId, todoData) {
     const title = String(todoData?.title || '').trim();
     if (!title) {
         throw httpError(400, 'Title is required');
+    }
+
+    const profileExists = await profilesRepository.ensureProfile(userId);
+    if (!profileExists) {
+        throw httpError(500, 'ユーザープロファイルの作成に失敗しました。再試行してください。');
     }
 
     const row = await todosRepository.createTodo(userId, {

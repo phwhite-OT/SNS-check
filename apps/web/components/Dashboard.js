@@ -38,6 +38,7 @@ export default function Dashboard({ user, onLogout }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   // Layout states
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'calendar', 'analysis'
@@ -79,12 +80,27 @@ export default function Dashboard({ user, onLogout }) {
   }, [user]);
 
   // Actions
+  const parseApiError = async (response, fallbackMessage) => {
+    try {
+      const json = await response.json();
+      if (json?.error) {
+        return json.error;
+      }
+    } catch {
+      // No JSON error body available
+    }
+    return fallbackMessage;
+  };
+
   const handleAddTodo = async (e) => {
     e.preventDefault();
     if (!newTodoTitle.trim()) return;
+
+    setActionError(null);
     const tagsArray = newTodoTags.split(',').map(tag => tag.trim()).filter(Boolean);
+
     try {
-      await fetch(`${API_BASE}/todos`, {
+      const response = await fetch(`${API_BASE}/todos`, {
         method: 'POST',
         headers: {
           'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
@@ -98,18 +114,29 @@ export default function Dashboard({ user, onLogout }) {
           priority: newTodoPriority
         })
       });
+
+      if (!response.ok) {
+        const message = await parseApiError(response, 'タスク追加に失敗しました。');
+        throw new Error(message);
+      }
+
       setNewTodoTitle('');
       setNewTodoDesc('');
       setNewTodoTags('');
       setNewTodoPriority('medium');
       setIsTaskModalOpen(false);
       fetchData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setActionError(e.message || 'タスク追加に失敗しました。');
+    }
   };
 
   const handleToggleTodo = async (id, currentStatus) => {
+    setActionError(null);
+
     try {
-      await fetch(`${API_BASE}/todos/${id}`, {
+      const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'PUT',
         headers: {
           'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
@@ -117,20 +144,40 @@ export default function Dashboard({ user, onLogout }) {
         },
         body: JSON.stringify({ completed: !currentStatus })
       });
+
+      if (!response.ok) {
+        const message = await parseApiError(response, 'タスク更新に失敗しました。');
+        throw new Error(message);
+      }
+
       fetchData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setActionError(e.message || 'タスク更新に失敗しました。');
+    }
   };
 
   const handleDeleteTodo = async (id) => {
+    setActionError(null);
+
     try {
-      await fetch(`${API_BASE}/todos/${id}`, {
+      const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
         },
       });
+
+      if (!response.ok) {
+        const message = await parseApiError(response, 'タスク削除に失敗しました。');
+        throw new Error(message);
+      }
+
       fetchData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setActionError(e.message || 'タスク削除に失敗しました。');
+    }
   };
 
   const handleDeleteBlacklist = async (domain) => {
@@ -286,6 +333,12 @@ export default function Dashboard({ user, onLogout }) {
                 </div>
                 <button style={{ background: 'transparent', border: 'none', color: 'white', opacity: 0.8, cursor: 'pointer' }}>閉じる ✕</button>
               </div>
+
+              {actionError && (
+                <div className="error-card" style={{ marginBottom: '1rem' }}>
+                  {actionError}
+                </div>
+              )}
 
               <div className="dashboard-grid">
                 {/* Left Column */}

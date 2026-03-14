@@ -6,6 +6,7 @@
  * 業務ロジック(入力検証や計算)はここでは行わない。
  */
 const { supabase } = require('../config/supabase');
+const { mapUiPriorityToDb } = require('../models/todoModel');
 
 
 // ユーザーのTODOリストを取得
@@ -22,16 +23,18 @@ async function listTodosByUser(userId) {
 
 // 新しいTODOを作成
 async function createTodo(userId, todoData) {
-    const { title, description, tags, priority } = todoData;
-    const due_date = todoData.due_date || todoData.dueDate;
+    const { title, description } = todoData;
+    const due_date = todoData.due_date || todoData.dueDate || null;
+    const dbPriority = mapUiPriorityToDb(todoData.priority);
+
     const { data, error } = await supabase
         .from('todos')
         .insert({
             user_id: userId,
             title,
             description: description || '',
-            priority: priority || 1, // smallint default
-            due_date: due_date || null,
+            priority: dbPriority || 2,
+            due_date,
             status: 'todo',
         })
         .select('id, title, status, created_at, description, priority, due_date')
