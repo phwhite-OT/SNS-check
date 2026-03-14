@@ -16,7 +16,7 @@ async function getTodos(req, res) {
 }
 
 async function createTodo(req, res) {
-    const todo = await todosService.addTodo(getUserId(req), req.body?.title);
+    const todo = await todosService.addTodo(getUserId(req), req.body);
     res.json(todo);
 }
 

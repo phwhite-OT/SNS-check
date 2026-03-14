@@ -12,13 +12,16 @@ async function getTodos(userId) {
     return rows.map(mapTodoRowToResponse);
 }
 
-async function addTodo(userId, title) {
-    const value = String(title || '').trim();
-    if (!value) {
+async function addTodo(userId, todoData) {
+    const title = String(todoData?.title || '').trim();
+    if (!title) {
         throw httpError(400, 'Title is required');
     }
 
-    const row = await todosRepository.createTodo(userId, value);
+    const row = await todosRepository.createTodo(userId, {
+        ...todoData,
+        title
+    });
     return mapTodoRowToResponse(row);
 }
 
