@@ -25,8 +25,12 @@ const {
 } = require('../controllers/calendarEventsController');
 const { postTime } = require('../controllers/timeController');
 const { getDashboard } = require('../controllers/dashboardController');
+const authRouter = require('./auth');
 
 const router = express.Router();
+
+// 認証ルート（セッション不要）
+router.use('/auth', authRouter);
 
 // ヘルスチェック用エンドポイント
 router.get('/status', getStatus);

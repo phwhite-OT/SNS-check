@@ -1,12 +1,14 @@
 /**
  * HTTPステータス付きErrorを作るヘルパー。
- * - service層で `throw httpError(400, '...')` のように利用する
+ * - service層で `throw new HttpError(400, '...')` のように利用する
  * - statusとmessageを持ったErrorを共通エラーハンドラへ渡せる
  */
-function httpError(status, message) {
-    const error = new Error(message);
-    error.status = status;
-    return error;
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+    this.name = 'HttpError';
+  }
 }
 
-module.exports = { httpError };
+module.exports = { HttpError, httpError: (status, message) => new HttpError(status, message) };
