@@ -37,28 +37,12 @@ async function ensureProfile(userId) {
             return false;
         }
 
-        // もしプロフィールがなければ作成を試みる（FK違反を避けるため）
-        let email = null;
-        try {
-            const { data: authData, error: authError } = await supabase.auth.admin.getUserById(userId);
-            if (authError) throw authError;
-            email = authData?.user?.email || null;
-        } catch (error) {
-            console.error('Failed to fetch auth user for profile bootstrap:', error.message);
-        }
-
-        if (!email) {
-            console.error('Failed to create profile automatically: email is required but could not be resolved');
-            return false;
-        }
-
         const { data, error } = await supabase
             .from('profiles')
             .insert({
                 id: userId,
                 email,
-                display_name: email.split('@')[0] || 'User', // 必須カラムへのデフォルト値
-                display_name: 'User', // 必須カラムへのデフォルト値
+                display_name: email.split('@')[0] || 'User',
                 timezone: 'UTC'       // 必須カラムへのデフォルト値
             })
             .select('id')
