@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
 /**
  * POST /api/auth/signup
@@ -9,14 +10,14 @@ export async function POST(request) {
     const { email, password } = await request.json();
 
     if (!email || !password) {
-      return Response.json(
+      return NextResponse.json(
         { error: 'メールアドレスとパスワードが必要です' },
         { status: 400 }
       );
     }
 
     if (password.length < 6) {
-      return Response.json(
+      return NextResponse.json(
         { error: 'パスワードは6文字以上である必要があります' },
         { status: 400 }
       );
@@ -29,19 +30,19 @@ export async function POST(request) {
     );
 
     // Supabase Auth でユーザーを作成
-    const { data, error } = await supabase.auth.signUpWithPassword({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
 
     if (error) {
-      return Response.json(
+      return NextResponse.json(
         { error: error.message || 'サインアップに失敗しました' },
         { status: 400 }
       );
     }
 
-    return Response.json({
+    return NextResponse.json({
       user: {
         id: data.user?.id,
         email: data.user?.email,
@@ -49,7 +50,7 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error('Signup error:', error);
-    return Response.json(
+    return NextResponse.json(
       { error: 'エラーが発生しました: ' + error.message },
       { status: 500 }
     );

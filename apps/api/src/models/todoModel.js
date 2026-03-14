@@ -10,7 +10,7 @@ function mapTodoRowToResponse(row) {
         id: row.id,
         title: row.title,
         description: row.description || '',
-        tags: row.tags || [],
+        tags: row.tags || [], // リポジトリで取得しない場合は空配列になる
         priority: row.priority || 'medium',
         dueDate: row.due_date || null,
         completed: row.status === 'done',
@@ -26,9 +26,12 @@ function mapTodoPatchToUpdate(patch) {
     if (typeof patch.description === 'string') {
         update.description = patch.description.trim();
     }
+    // データベースに tags カラムがない間は送信をスキップ
+    /*
     if (Array.isArray(patch.tags)) {
         update.tags = patch.tags;
     }
+    */
     if (typeof patch.priority === 'string') {
         update.priority = patch.priority;
     }

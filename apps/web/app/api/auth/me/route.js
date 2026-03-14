@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
 /**
  * GET /api/auth/me
@@ -10,7 +11,7 @@ export async function GET(request) {
     const userId = request.cookies.get('user-id')?.value;
 
     if (!token || !userId) {
-      return Response.json(
+      return NextResponse.json(
         { authenticated: false, user: null },
         { status: 200 }
       );
@@ -27,7 +28,7 @@ export async function GET(request) {
 
     if (error || !data.user) {
       // トークンが無効な場合、クッキーをクリア
-      const res = Response.json(
+      const res = NextResponse.json(
         { authenticated: false, user: null },
         { status: 200 }
       );
@@ -36,7 +37,7 @@ export async function GET(request) {
       return res;
     }
 
-    return Response.json(
+    return NextResponse.json(
       {
         authenticated: true,
         user: {
@@ -48,7 +49,7 @@ export async function GET(request) {
     );
   } catch (error) {
     console.error('Auth check error:', error);
-    return Response.json(
+    return NextResponse.json(
       { authenticated: false, user: null },
       { status: 200 }
     );

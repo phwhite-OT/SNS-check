@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
 /**
  * POST /api/auth/login
@@ -9,7 +10,7 @@ export async function POST(request) {
     const { email, password } = await request.json();
 
     if (!email || !password) {
-      return Response.json(
+      return NextResponse.json(
         { error: 'メールアドレスとパスワードが必要です' },
         { status: 400 }
       );
@@ -28,14 +29,14 @@ export async function POST(request) {
     });
 
     if (error) {
-      return Response.json(
+      return NextResponse.json(
         { error: error.message || 'ログインに失敗しました' },
         { status: 401 }
       );
     }
 
     // セッションをクッキーに保存
-    const res = Response.json({
+    const res = NextResponse.json({
       user: {
         id: data.user?.id,
         email: data.user?.email,
@@ -70,7 +71,7 @@ export async function POST(request) {
     return res;
   } catch (error) {
     console.error('Login error:', error);
-    return Response.json(
+    return NextResponse.json(
       { error: 'エラーが発生しました: ' + error.message },
       { status: 500 }
     );

@@ -16,14 +16,27 @@ const DEFAULT_BLACKLIST = [
     'tiktok.com',
 ];
 
+const profilesRepository = require('../repositories/profilesRepository');
+
 // ユーザーのブラックリストにデフォルトドメインが含まれているか確認し、なければ追加する
 async function ensureDefaultBlacklist(userId) {
+    // まずプロフィールが存在するか確認し、なければ作成を試みる
+    const profileExists = await profilesRepository.ensureProfile(userId);
+    if (!profileExists) {
+        console.warn(`Skipping default blacklist setup for user ${userId} due to missing profile.`);
+        return;
+    }
+
     const current = await alertRulesRepository.listAlertRulesByUser(userId);
     const currentSet = new Set(current.map((item) => item.target_domain));
     const missing = DEFAULT_BLACKLIST.filter((domain) => !currentSet.has(domain));
 
     for (const domain of missing) {
-        await alertRulesRepository.insertAlertRule(userId, domain, 900);
+        try {
+            await alertRulesRepository.insertAlertRule(userId, domain, 900);
+        } catch (error) {
+            console.error(`Failed to insert default blacklist item ${domain} for user ${userId}:`, error.message);
+        }
     }
 }
 

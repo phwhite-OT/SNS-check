@@ -11,7 +11,7 @@ class AuthService {
   async signup(email, password) {
     try {
       // Supabase Auth でユーザーを作成
-      const { data, error } = await supabase.auth.signUpWithPassword({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
       });
