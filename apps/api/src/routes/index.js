@@ -1,3 +1,8 @@
+/**
+ * APIルーティング定義。
+ * - URLとcontrollerを対応付ける
+ * - 非同期controllerは `asyncHandler` でラップして例外を共通処理へ流す
+ */
 const express = require('express');
 const { asyncHandler } = require('../middlewares/asyncHandler');
 const { getStatus } = require('../controllers/statusController');

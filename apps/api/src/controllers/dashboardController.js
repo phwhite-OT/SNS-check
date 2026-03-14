@@ -1,3 +1,7 @@
+/**
+ * ダッシュボードAPIのcontroller。
+ * - 集約済みダッシュボード情報をservice層から取得して返却する
+ */
 const dashboardService = require('../services/dashboardService');
 
 function getUserId(req) {

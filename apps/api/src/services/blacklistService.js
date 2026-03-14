@@ -1,3 +1,8 @@
+/**
+ * Blacklist機能の業務ロジックを担当するサービス層。
+ * - 初回取得時にデフォルトドメインを補完
+ * - 追加/削除時の入力検証と結果整形を実施
+ */
 const alertRulesRepository = require('../repositories/alertRulesRepository');
 const { normalizeDomain, mapAlertRuleRowToBlacklistItem } = require('../models/blacklistModel');
 const { httpError } = require('../utils/httpError');

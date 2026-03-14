@@ -1,3 +1,9 @@
+/**
+ * Todo APIのcontroller。
+ * - HTTPリクエストから必要値を取り出してserviceへ渡す
+ * - serviceの結果をHTTPレスポンスとして返す
+ * - `x-user-id` 未指定時は `defaultUserId` を使用
+ */
 const todosService = require('../services/todosService');
 
 function getUserId(req) {

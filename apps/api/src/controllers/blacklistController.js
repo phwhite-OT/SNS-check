@@ -1,3 +1,9 @@
+
+/**
+ * Blacklist APIのcontroller。
+ * - 一覧取得・追加・削除のHTTP入出力を担当
+ * - 実際の業務ロジックはservice層へ委譲
+ */
 const blacklistService = require('../services/blacklistService');
 
 function getUserId(req) {

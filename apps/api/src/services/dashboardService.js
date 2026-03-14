@@ -1,3 +1,9 @@
+/**
+ * ダッシュボード表示用データを集約するサービス層。
+ * - Todo/Blacklist/TabSessionを並列取得
+ * - `timeData` と `totalTimeSeconds` を集計
+ * - 設定値に基づいてスコアを算出
+ */
 const { env } = require('../config/env');
 const todosService = require('./todosService');
 const blacklistService = require('./blacklistService');

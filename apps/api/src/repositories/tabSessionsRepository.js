@@ -1,3 +1,8 @@
+/**
+ * `tab_sessions` テーブル専用のデータアクセス層(repository)。
+ * - 拡張機能から送られた滞在ログをINSERT
+ * - ダッシュボード集計用にユーザー別セッションを取得
+ */
 const { supabase } = require('../config/supabase');
 
 async function insertTabSession(session) {

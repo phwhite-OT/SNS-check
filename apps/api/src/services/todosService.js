@@ -1,3 +1,8 @@
+/**
+ * Todo機能の業務ロジックを担当するサービス層。
+ * - 入力値を検証し、不正ならHTTPエラーを投げる
+ * - repository層でDB操作し、modelでレスポンス形式へ変換
+ */
 const { httpError } = require('../utils/httpError');
 const todosRepository = require('../repositories/todosRepository');
 const { mapTodoRowToResponse, mapTodoPatchToUpdate } = require('../models/todoModel');

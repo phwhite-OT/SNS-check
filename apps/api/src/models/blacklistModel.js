@@ -1,3 +1,9 @@
+/**
+ * Blacklistデータの整形ルールを集約するモデル層。
+ * - ドメインをtrim + 小文字化して比較しやすくする
+ * - `alert_rules` の行をAPIの `blacklist` 形式へ変換する
+ * - 表示名(サイト名)の規約をここで統一する
+ */
 function normalizeDomain(domain) {
     return String(domain || '').trim().toLowerCase();
 }

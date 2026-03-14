@@ -1,3 +1,11 @@
+/**
+ * Expressアプリの組み立てを行うファイル。
+ * - CORS / JSONパーサーなど共通ミドルウェアを設定
+ * - `/api` へルーターをマウント
+ * - 最後に共通 `errorHandler` を適用
+ *
+ * `defaultUserId` は開発用の既定ユーザーIDとして `app.locals` に保持する。
+ */
 const express = require('express');
 const cors = require('cors');
 const { env } = require('./config/env');

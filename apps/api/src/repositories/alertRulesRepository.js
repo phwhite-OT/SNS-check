@@ -1,3 +1,8 @@
+/**
+ * `alert_rules` テーブル専用のデータアクセス層(repository)。
+ * - ブラックリスト設定の取得・追加・削除を担当
+ * - `enabled=true` の条件を使って有効なルールのみ返す
+ */
 const { supabase } = require('../config/supabase');
 
 async function listAlertRulesByUser(userId) {

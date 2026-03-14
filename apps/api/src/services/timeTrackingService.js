@@ -1,3 +1,8 @@
+/**
+ * 滞在時間トラッキングの業務ロジックを担当するサービス層。
+ * - `{ site, time }` のバリデーション
+ * - `started_at` / `ended_at` を計算してセッションとして保存
+ */
 const { httpError } = require('../utils/httpError');
 const tabSessionsRepository = require('../repositories/tabSessionsRepository');
 
