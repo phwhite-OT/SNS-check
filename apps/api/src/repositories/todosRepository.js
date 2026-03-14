@@ -22,17 +22,17 @@ async function listTodosByUser(userId) {
 
 // 新しいTODOを作成
 async function createTodo(userId, todoData) {
-    const { title, description, tags, priority } = todoData;
-    const due_date = todoData.due_date || todoData.dueDate;
+    const { title, description, priority, due_date, status } = todoData;
+    
     const { data, error } = await supabase
         .from('todos')
         .insert({
             user_id: userId,
             title,
             description: description || '',
-            priority: priority || 1, // smallint default
+            priority: priority || 1,
             due_date: due_date || null,
-            status: 'todo',
+            status: status || 'todo',
         })
         .select('id, title, status, created_at, description, priority, due_date')
         .single();

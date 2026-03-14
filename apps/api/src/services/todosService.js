@@ -5,6 +5,7 @@
  */
 const { httpError } = require('../utils/httpError');
 const todosRepository = require('../repositories/todosRepository');
+const profilesRepository = require('../repositories/profilesRepository');
 const { mapTodoRowToResponse, mapTodoPatchToUpdate } = require('../models/todoModel');
 
 // ユーザーのTodo一覧を取得
@@ -20,10 +21,16 @@ async function addTodo(userId, todoData) {
         throw httpError(400, 'Title is required');
     }
 
-    const row = await todosRepository.createTodo(userId, {
+    // 新規ユーザーなどの場合、プロフィールの存在を確約する（FK違反防止）
+    await profilesRepository.ensureProfile(userId);
+
+    // モデル層の変換ロジックを利用してDB用のオブジェクトを作成
+    const updatePayload = mapTodoPatchToUpdate({
         ...todoData,
         title
     });
+
+    const row = await todosRepository.createTodo(userId, updatePayload);
     return mapTodoRowToResponse(row);
 }
 

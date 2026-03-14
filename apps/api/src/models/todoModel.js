@@ -5,13 +5,25 @@
  *
  * 形式変換をこのファイルに寄せることで、service/controllerを簡潔に保つ。
  */
+const PRIORITY_MAP = {
+    'low': 1,
+    'medium': 2,
+    'high': 3
+};
+
+const REVERSE_PRIORITY_MAP = {
+    1: 'low',
+    2: 'medium',
+    3: 'high'
+};
+
 function mapTodoRowToResponse(row) {
     return {
         id: row.id,
         title: row.title,
         description: row.description || '',
         tags: row.tags || [], // リポジトリで取得しない場合は空配列になる
-        priority: row.priority || 'medium',
+        priority: REVERSE_PRIORITY_MAP[row.priority] || 'medium',
         dueDate: row.due_date || null,
         completed: row.status === 'done',
         createdAt: row.created_at
@@ -33,7 +45,7 @@ function mapTodoPatchToUpdate(patch) {
     }
     */
     if (typeof patch.priority === 'string') {
-        update.priority = patch.priority;
+        update.priority = PRIORITY_MAP[patch.priority] || 2;
     }
     if (patch.dueDate !== undefined) {
         update.due_date = patch.dueDate;
