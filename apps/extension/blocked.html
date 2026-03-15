@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>ACCESS DENIED</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            background: #000;
+            color: #00ff41;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            cursor: default;
+        }
+
+        /* CRTスキャンライン効果 */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(0deg,
+                    rgba(0, 0, 0, 0.18) 0px,
+                    rgba(0, 0, 0, 0.18) 1px,
+                    transparent 1px,
+                    transparent 3px);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* 画面端の CRT ビネット */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.75) 100%);
+            pointer-events: none;
+            z-index: 99;
+        }
+
+        /* ===== ACCESS DENIED ===== */
+        .access-denied {
+            font-size: clamp(2.5rem, 9vw, 7.5rem);
+            font-weight: 900;
+            color: #ff0000;
+            text-shadow:
+                0 0 10px #ff0000,
+                0 0 30px #ff0000,
+                0 0 60px #cc0000;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            animation: blink 1.4s step-end infinite;
+            margin-bottom: 2.5rem;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            45%,
+            55% {
+                opacity: 0.15;
+            }
+        }
+
+        /* ===== ターミナルログ ===== */
+        .terminal {
+            width: min(680px, 90vw);
+            background: rgba(0, 20, 0, 0.6);
+            border: 1px solid #00ff41;
+            border-radius: 4px;
+            padding: 1.4rem 1.8rem;
+            font-size: clamp(0.75rem, 1.8vw, 1rem);
+            line-height: 2.2;
+            box-shadow: 0 0 25px rgba(0, 255, 65, 0.2);
+        }
+
+        .line {
+            display: flex;
+            gap: 0.6em;
+        }
+
+        .prompt {
+            color: #00ff41;
+            flex-shrink: 0;
+        }
+
+        .label {
+            color: #888;
+            flex-shrink: 0;
+        }
+
+        .value-red {
+            color: #ff4444;
+            font-weight: bold;
+        }
+
+        .value-orange {
+            color: #ff8c00;
+            font-weight: bold;
+        }
+
+        .value-green {
+            color: #00ff41;
+        }
+
+        .value-dim {
+            color: #555;
+        }
+
+        /* タイプアニメーション */
+        .typed {
+            overflow: hidden;
+            white-space: nowrap;
+            border-right: 2px solid transparent;
+        }
+
+        .typed.active {
+            border-right-color: #00ff41;
+            animation: cursor-blink 0.7s step-end infinite;
+        }
+
+        @keyframes cursor-blink {
+
+            0%,
+            100% {
+                border-right-color: #00ff41;
+            }
+
+            50% {
+                border-right-color: transparent;
+            }
+        }
+
+        /* ===== ボタン ===== */
+        .buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2.2rem;
+        }
+
+        .btn {
+            padding: 0.7rem 2rem;
+            background: transparent;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem;
+            font-weight: bold;
+            letter-spacing: 0.12em;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.15s;
+        }
+
+        .btn-close {
+            border: 2px solid #ff0000;
+            color: #ff0000;
+        }
+
+        .btn-close:hover {
+            background: #ff0000;
+            color: #000;
+            box-shadow: 0 0 14px #ff0000;
+        }
+
+        .btn-back {
+            border: 2px solid #00ff41;
+            color: #00ff41;
+        }
+
+        .btn-back:hover {
+            background: #00ff41;
+            color: #000;
+            box-shadow: 0 0 14px #00ff41;
+        }
+
+        /* ===== カウントダウン ===== */
+        .countdown {
+            margin-top: 1.5rem;
+            color: #444;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+        }
+
+        .countdown span {
+            color: #ff4444;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="access-denied">⛔ ACCESS DENIED</div>
+
+    <div class="terminal" id="terminal">
+        <!-- JavaScriptで動的に行を追加 -->
+    </div>
+
+    <div class="buttons">
+        <button class="btn btn-close" onclick="closeTab()">[ TAB を閉じる ]</button>
+        <button class="btn btn-back" onclick="goBack()">[ 前のページへ ]</button>
+    </div>
+
+    <div class="countdown" id="countdown"></div>
+
+    <script>
+        // ===== URL パラメータ取得 =====
+        const params = new URLSearchParams(window.location.search);
+        const siteName = params.get('site') || '不明なサイト';
+        const limitMin = params.get('limit') || '15';
+        const elapsed = params.get('elapsed') || limitMin;
+
+        // ===== ターミナルログ定義 =====
+        const lines = [
+            { prompt: '>>', label: 'SYSTEM  :', value: 'ブラックリストサイト滞在制限に達しました。', cls: 'value-red' },
+            { prompt: '>>', label: 'SITE    :', value: siteName, cls: 'value-orange' },
+            { prompt: '>>', label: 'LIMIT   :', value: `${limitMin} 分`, cls: 'value-green' },
+            { prompt: '>>', label: 'ELAPSED :', value: `${elapsed} 分`, cls: 'value-red' },
+            { prompt: '>>', label: 'STATUS  :', value: '■ LOCKED', cls: 'value-red' },
+            { prompt: '>>', label: 'ACTION  :', value: 'タブをロックしました。作業に戻ってください。', cls: 'value-dim' },
+        ];
+
+        const terminal = document.getElementById('terminal');
+
+        // ===== タイプライターアニメーション =====
+        function addLine(lineData, delay) {
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const div = document.createElement('div');
+                    div.className = 'line';
+
+                    const promptEl = document.createElement('span');
+                    promptEl.className = 'prompt';
+                    promptEl.textContent = lineData.prompt;
+
+                    const labelEl = document.createElement('span');
+                    labelEl.className = 'label';
+                    labelEl.textContent = lineData.label;
+
+                    const valueEl = document.createElement('span');
+                    valueEl.className = `typed active ${lineData.cls}`;
+
+                    div.appendChild(promptEl);
+                    div.appendChild(labelEl);
+                    div.appendChild(valueEl);
+                    terminal.appendChild(div);
+
+                    // タイプ効果
+                    const text = lineData.value;
+                    let i = 0;
+                    const speed = 30;
+                    const typeInterval = setInterval(() => {
+                        valueEl.textContent = text.slice(0, i + 1);
+                        i++;
+                        if (i >= text.length) {
+                            clearInterval(typeInterval);
+                            valueEl.classList.remove('active');
+                            resolve();
+                        }
+                    }, speed);
+                }, delay);
+            });
+        }
+
+        async function runAnimation() {
+            for (let i = 0; i < lines.length; i++) {
+                await addLine(lines[i], i === 0 ? 300 : 0);
+                await new Promise(r => setTimeout(r, 80));
+            }
+        }
+
+        runAnimation();
+
+        // ===== 自動クローズ カウントダウン =====
+        let countdown = 30;
+        const countdownEl = document.getElementById('countdown');
+
+        const timer = setInterval(() => {
+            countdownEl.innerHTML = `>> タブは <span>${countdown}</span> 秒後に自動で閉じます...`;
+            countdown--;
+            if (countdown < 0) {
+                clearInterval(timer);
+                window.close();
+            }
+        }, 1000);
+
+        // ===== ボタン操作 =====
+        function closeTab() {
+            clearInterval(timer);
+            window.close();
+        }
+
+        function goBack() {
+            clearInterval(timer);
+            // 履歴を2つ戻る（blocked.html の手前のページへ）
+            history.go(-2);
+        }
+    </script>
+</body>
+
+</html>

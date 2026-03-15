@@ -4,8 +4,19 @@ const API_ENDPOINT = `${API_BASE}/time`;
 // TODO: Supabaseの profiles.id（実在UUID）に置き換えてください。
 const X_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
+// 🔒 ロック閾値（秒）：この時間を超えると ACCESS DENIED 画面を表示
+// 変更したい場合はこの値を書き換えてください（例：30分 = 30 * 60）
+const LOCK_THRESHOLD_SECONDS = 5; // 15分
+
 // 動的なターゲットサイト一覧
 let targetSites = {};
+
+// 🔒 タブごとの累積ブラックリストサイト滞在時間（秒）
+// キー: tabId、値: そのタブで今日のセッション中に累積した秒数
+const tabAccumulatedSeconds = {};
+
+// 🔒 すでにロック画面を表示したタブ（重複発動防止）
+const lockedTabs = new Set();
 
 // バックエンドからブラックリストを取得する関数
 async function fetchBlacklist() {
@@ -70,6 +81,11 @@ function handleTabSwitch(tabId) {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         if (elapsed > 0) {
             saveTime(activeSite, elapsed);
+            // 🔒 タブごとの累積時間に加算
+            if (activeTabId !== null) {
+                tabAccumulatedSeconds[activeTabId] =
+                    (tabAccumulatedSeconds[activeTabId] || 0) + elapsed;
+            }
         }
     }
 
@@ -92,6 +108,11 @@ function handleTabSwitch(tabId) {
                     if (url.hostname.includes(domain)) {
                         activeSite = siteName;    // ターゲット発見！サイト名を記録。
                         startTime = Date.now();   // 見始めた時間を記録。タイマースタート！
+                        // 🔒 このタブが既に閾値を超えていたらすぐロック
+                        if ((tabAccumulatedSeconds[tabId] || 0) >= LOCK_THRESHOLD_SECONDS
+                            && !lockedTabs.has(tabId)) {
+                            triggerLockScreen(tabId, siteName);
+                        }
                         break;
                     }
                 }
@@ -125,13 +146,60 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 });
 
-// 🚀 --- バックエンド（API）にデータを送信する関数 ---
+// � --- ロック閾値チェック関数 ---
+// syncToApi（5秒ごと）から呼ばれ、累積時間が閾値を超えたらロック画面へ遷移する
+function checkLockThreshold() {
+    if (!activeSite || !startTime || activeTabId === null) return;
+    if (lockedTabs.has(activeTabId)) return;
+
+    const total = tabAccumulatedSeconds[activeTabId] || 0;
+    if (total >= LOCK_THRESHOLD_SECONDS) {
+        triggerLockScreen(activeTabId, activeSite);
+    }
+}
+
+// 🔒 --- ロック画面を表示する関数 ---
+function triggerLockScreen(tabId, siteName) {
+    // 重複防止フラグをセット
+    lockedTabs.add(tabId);
+
+    // 累積時間をリセット（ロック後に再訪した場合は新たなセッションとして計測）
+    delete tabAccumulatedSeconds[tabId];
+
+    // アクティブ計測をリセット（onUpdated が発火してもタイマーが二重にならないように）
+    activeSite = null;
+    startTime = null;
+
+    // 経過分数を計算して URL パラメータとして渡す
+    const elapsedMin = Math.round(LOCK_THRESHOLD_SECONDS / 60);
+    const blockedUrl = chrome.runtime.getURL(
+        `blocked.html?site=${encodeURIComponent(siteName)}&limit=${elapsedMin}&elapsed=${elapsedMin}`
+    );
+
+    chrome.tabs.update(tabId, { url: blockedUrl });
+    console.log(`🔒 LOCKED: ${siteName} (tabId=${tabId})`);
+}
+
+// 🔒 --- タブが閉じられたらトラッキングデータをクリーンアップ ---
+chrome.tabs.onRemoved.addListener((tabId) => {
+    delete tabAccumulatedSeconds[tabId];
+    lockedTabs.delete(tabId);
+});
+
+// �🚀 --- バックエンド（API）にデータを送信する関数 ---
 function syncToApi() {
     // もしまだ対象のSNSを見続けている最中なら、これまでの時間を一旦保存してタイマーをリセット
     if (activeSite && startTime) {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         saveTime(activeSite, elapsed);
+        // 🔒 タブごとの累積時間に加算
+        if (activeTabId !== null) {
+            tabAccumulatedSeconds[activeTabId] =
+                (tabAccumulatedSeconds[activeTabId] || 0) + elapsed;
+        }
         startTime = Date.now(); // タイマーリスタート
+        // 🔒 閾値チェック（5秒ごとのアラームで定期的に確認）
+        checkLockThreshold();
     }
 
     // ブラウザに保存されているすべてのデータを取得
