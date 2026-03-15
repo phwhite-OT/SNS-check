@@ -33,7 +33,7 @@ npm run dev
 ```
 
 - 🖥️ **Webダッシュボード**: [http://localhost:3000](http://localhost:3000)
-- 🔌 **バックエンドAPI**: [http://localhost:3001](http://localhost:3001)
+- 🔌 **バックエンドAPI（内部）**: `http://127.0.0.1:3001`（通常は Web から `/api` 経由で利用）
 
 *(※ 常にターミナルを開いたままにしておいてください。止める時は `Ctrl + C` を押します)*
 

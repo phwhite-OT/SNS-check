@@ -4,7 +4,8 @@
 
 ## 共通仕様
 
-- ベースURL: `http://localhost:3001/api`
+- 公開ベースURL（Web/ブラウザから）: `/api`
+- 内部ベースURL（同一サーバー内）: `http://127.0.0.1:3001/api`
 - Content-Type: `application/json`
 - 認証（暫定）: `x-user-id` ヘッダー（任意）
   - 未指定時はサーバーの `defaultUserId` が使われます

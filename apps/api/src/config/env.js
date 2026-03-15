@@ -9,7 +9,6 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const env = {
-    PORT: Number(process.env.PORT || 3001),
     SUPABASE_URL: process.env.SUPABASE_URL || '',
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
     DEFAULT_USER_ID: process.env.DEFAULT_USER_ID || '00000000-0000-0000-0000-000000000000',
