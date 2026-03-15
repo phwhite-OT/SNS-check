@@ -19,9 +19,11 @@ async function loadConfig() {
     return new Promise((resolve) => {
         chrome.storage.local.get(['apiUrl'], (result) => {
             if (result.apiUrl) {
-                APP_ORIGIN = result.apiUrl.replace(/\/api\/?$/, '');
-                API_DASHBOARD = `${APP_ORIGIN}/api/dashboard`;
+                const apiBase = result.apiUrl.replace(/\/$/, '');
+                APP_ORIGIN = apiBase.replace(/\/api\/?$/, '');
+                API_DASHBOARD = `${apiBase}/dashboard`;
                 DASHBOARD_URL = `${APP_ORIGIN}/`;
+                console.log('📡 Updated Popup Config:', { APP_ORIGIN, API_DASHBOARD });
             }
             resolve();
         });
@@ -180,6 +182,7 @@ async function loadDashboard() {
             headers: {
                 'x-user-id': currentAuth.userId,
             },
+            // credentials: 'include',
         });
 
         if (!response.ok) {

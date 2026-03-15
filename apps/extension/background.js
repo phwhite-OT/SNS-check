@@ -87,9 +87,11 @@ function loadConfig() {
     return new Promise((resolve) => {
         chrome.storage.local.get(['apiUrl'], (result) => {
             if (result.apiUrl) {
-                APP_ORIGIN = result.apiUrl.replace(/\/api\/?$/, '');
-                API_BASE = `${APP_ORIGIN}/api`;
+                // apiUrl is e.g. "https://sns-check.onrender.com/api"
+                API_BASE = result.apiUrl.replace(/\/$/, '');
+                APP_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
                 API_ENDPOINT = `${API_BASE}/time`;
+                console.log('📡 Updated Config from Storage:', { API_BASE, APP_ORIGIN });
             }
             resolve();
         });
@@ -138,7 +140,7 @@ async function fetchBlacklist() {
             headers: {
                 'x-user-id': userId,
             },
-            credentials: 'include',
+            // credentials: 'include', // セッションクッキー不要のため削除（CORSトラブル回避）
         });
 
         if (!res.ok) {
@@ -184,7 +186,7 @@ async function syncFocusModeFromApi() {
             headers: {
                 'x-user-id': userId,
             },
-            credentials: 'include',
+            // credentials: 'include', // セッションクッキー不要のため削除（CORSトラブル回避）
         });
 
         if (!res.ok) {
@@ -240,7 +242,7 @@ async function setFocusModeFromPopup(enabled) {
                 'Content-Type': 'application/json',
                 'x-user-id': userId,
             },
-            credentials: 'include',
+            // credentials: 'include',
             body: JSON.stringify({ enabled: Boolean(enabled) }),
         });
 
@@ -291,7 +293,7 @@ async function loginWithCredentials(email, password) {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email: safeEmail, password: safePassword }),
-        credentials: 'include',
+        // credentials: 'include',
     });
 
     let payload = null;
@@ -327,7 +329,7 @@ async function logoutUser() {
     try {
         await fetch(`${API_BASE}/auth/logout`, {
             method: 'POST',
-            credentials: 'include',
+            // credentials: 'include',
         });
     } catch (_error) {
         // Keep logout robust even if network is unavailable.
@@ -433,7 +435,7 @@ function syncToApi() {
                     'Content-Type': 'application/json',
                     'x-user-id': userId,
                 },
-                credentials: 'include',
+                // credentials: 'include',
                 body: JSON.stringify({ site, time }),
             })
                 .then((response) => {
@@ -478,7 +480,7 @@ async function syncHistory() {
                         'Content-Type': 'application/json',
                         'x-user-id': userId,
                     },
-                    credentials: 'include',
+                    // credentials: 'include',
                     body: JSON.stringify({ history: historyItems }),
                 })
                     .then((res) => {
