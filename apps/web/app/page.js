@@ -69,31 +69,11 @@ export default function Home() {
   // ローディング画面
   if (isLoading) {
     return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: 50,
-            height: 50,
-            border: '4px solid rgba(255,255,255,0.3)',
-            borderTop: '4px solid white',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 1.5rem',
-          }} />
-          <p style={{ color: 'white', fontSize: '1.1rem', fontWeight: 500 }}>
-            読み込み中...
-          </p>
-          <style>{`
-            @keyframes spin {
-              to { transform: rotate(360deg); }
-            }
-          `}</style>
+      <div className="boot-screen">
+        <div className="boot-card">
+          <div className="boot-ring" />
+          <h2>Focus Quest</h2>
+          <p>今日のミッションを読み込み中...</p>
         </div>
       </div>
     );
@@ -110,10 +90,30 @@ export default function Home() {
               <div className="login-deco-card login-deco-card--medium" />
               <div className="login-deco-card login-deco-card--small" />
               <div className="login-deco-badge" />
+              <div className="login-deco-meter">
+                <span>集中ゲージ</span>
+                <strong>76%</strong>
+              </div>
             </div>
             <div className="login-copy">
-              <h1 className="login-title">時間に縛られるな、時間を使いこなせ</h1>
-              <p className="login-subtitle">タスクと時間を可視化して、充実した日々に。</p>
+              <p className="login-kicker">UNIVERSITY STARTER MODE</p>
+              <h1 className="login-title">SNSの衝動を、学習クエストに変える。</h1>
+              <p className="login-subtitle">大学生活の最初の習慣づくりを、ゲーム感覚で。ToDo管理と閲覧ログをひとつの画面で見える化します。</p>
+              <ul className="login-feature-list">
+                <li className="login-feature-item"><span>01</span> 期限つきタスクで「今やること」を固定</li>
+                <li className="login-feature-item"><span>02</span> URL分析でSNS時間を見える化</li>
+                <li className="login-feature-item"><span>03</span> 1日ごとの達成率で小さく勝ち続ける</li>
+              </ul>
+            </div>
+            <div className="login-quick-stats">
+              <div className="quick-stat">
+                <span>今日の目標</span>
+                <strong>90分の集中</strong>
+              </div>
+              <div className="quick-stat">
+                <span>想定ロス削減</span>
+                <strong>¥2,400 / 週</strong>
+              </div>
             </div>
           </div>
           <div className="login-right">

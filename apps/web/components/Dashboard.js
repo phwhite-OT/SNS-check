@@ -329,7 +329,7 @@ export default function Dashboard({ user, onLogout }) {
       <aside className="sidebar">
         <div className="sidebar-logo">
           <Clock size={32} />
-          <span>TaskFlow</span>
+          <span>Focus Quest</span>
         </div>
 
         <button className="btn-new-task-sidebar mb-2" onClick={() => setIsTaskModalOpen(true)}>
@@ -337,16 +337,16 @@ export default function Dashboard({ user, onLogout }) {
           <span>新規タスク作成</span>
         </button>
 
-        <div className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '1rem', marginTop: '1.5rem' }}>ワークスペース</div>
+        <div className="sidebar-label">ワークスペース</div>
         <nav className="sidebar-nav">
           <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
             <HomeIcon size={18} />
-            <span>全てのタスク</span>
-            {remainingTodosCount > 0 && <span style={{ marginLeft: 'auto', background: '#5244e1', color: 'white', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '10px' }}>{remainingTodosCount}</span>}
+            <span>ミッション一覧</span>
+            {remainingTodosCount > 0 && <span className="nav-count-pill">{remainingTodosCount}</span>}
           </div>
           <div className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
             <BarChart3 size={18} />
-            <span>URL分析</span>
+            <span>集中ログ分析</span>
           </div>
           <div className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`} onClick={() => setActiveTab('calendar')}>
             <CalendarIcon size={18} />
@@ -354,26 +354,8 @@ export default function Dashboard({ user, onLogout }) {
           </div>
         </nav>
 
-        <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--tf-border)' }}>
-          <button
-            onClick={handleLogout}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              padding: '0.75rem 1rem',
-              background: 'transparent',
-              border: 'none',
-              color: '#ef4444',
-              cursor: 'pointer',
-              fontWeight: 600,
-              borderRadius: '8px',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => e.target.style.background = '#fee2e2'}
-            onMouseLeave={(e) => e.target.style.background = 'transparent'}
-          >
+        <div className="sidebar-footer">
+          <button onClick={handleLogout} className="btn-logout">
             <LogOut size={18} />
             <span>ログアウト</span>
           </button>
@@ -384,11 +366,11 @@ export default function Dashboard({ user, onLogout }) {
         {/* Top Header */}
         <header className="top-header">
           <div className="header-left"></div>
-          <div className="header-right" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <div style={{ fontSize: '0.9rem', color: '#666' }}>
+          <div className="header-right">
+            <div className="header-email">
               {user?.email}
             </div>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5244e1', fontWeight: 800, fontSize: '0.8rem' }}>
+            <div className="header-avatar">
               {user?.email?.charAt(0).toUpperCase() || 'U'}
             </div>
           </div>
@@ -400,14 +382,11 @@ export default function Dashboard({ user, onLogout }) {
               {/* Welcome Banner */}
               {isWelcomeBannerVisible && (
                 <div className="welcome-banner">
-                  <div style={{ flex: 1 }}>
-                    <h1>お帰りなさい！</h1>
-                    <p>今日は {remainingTodosCount} 個のタスクが残っています。頑張りましょう！</p>
+                  <div className="welcome-copy">
+                    <h1>今日のフォーカスクエスト</h1>
+                    <p>未完了ミッションは {remainingTodosCount} 件。まずは 1 件クリアして勢いを作ろう。</p>
                   </div>
-                  <button
-                    onClick={() => setIsWelcomeBannerVisible(false)}
-                    style={{ background: 'transparent', border: 'none', color: 'white', opacity: 0.8, cursor: 'pointer' }}
-                  >
+                  <button onClick={() => setIsWelcomeBannerVisible(false)} className="welcome-close-btn">
                     閉じる ✕
                   </button>
                 </div>
@@ -419,10 +398,10 @@ export default function Dashboard({ user, onLogout }) {
                   <section className="glass-card mb-2">
                     <div className="card-header">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{ background: '#5244e1', padding: '6px', borderRadius: '8px', color: 'white' }}>
+                        <div className="task-card-icon">
                           <FileText size={18} />
                         </div>
-                        <h2>全てのタスク</h2>
+                        <h2>ミッション一覧</h2>
                       </div>
                       <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{format(new Date(selectedDate), 'yyyy年 M月 d日', { locale: ja })}</span>
                     </div>
@@ -465,7 +444,7 @@ export default function Dashboard({ user, onLogout }) {
                           </div>
                           <div className="flex gap-2 items-center">
                             {deletingTodoId === todo.id ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#6b7280', fontSize: '0.75rem' }}>
+                              <span className="status-inline">
                                 <LoaderCircle size={16} /> 削除中...
                               </span>
                             ) : (
@@ -477,7 +456,7 @@ export default function Dashboard({ user, onLogout }) {
                       ))}
                       {filteredTodos.length === 0 && <li className="text-muted text-center py-4">この日のタスクはありません。</li>}
                       <div className="mt-2 text-center">
-                        <button className="text-muted cursor-pointer" onClick={() => setIsTaskModalOpen(true)} style={{ background: 'transparent', border: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}>
+                        <button className="add-task-inline" onClick={() => setIsTaskModalOpen(true)}>
                           <Plus size={16} /> タスクを追加
                         </button>
                       </div>
@@ -487,13 +466,13 @@ export default function Dashboard({ user, onLogout }) {
 
                 {/* Right Column */}
                 <div className="dashboard-right">
-                  <section className="glass-card mb-2" style={{ padding: 0, overflow: 'hidden' }}>
-                    <div style={{ background: '#5244e1', color: 'white', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <section className="glass-card mini-calendar-card mb-2">
+                    <div className="mini-calendar-header">
                       <ChevronLeft size={20} className="cursor-pointer" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} />
-                      <span style={{ fontWeight: 800 }}>{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
+                      <span className="mini-calendar-title">{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
                       <ChevronRight size={20} className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
                     </div>
-                    <div style={{ padding: '1.5rem' }}>
+                    <div className="mini-calendar-body">
                       <div className="calendar-grid">
                         {['日', '月', '火', '水', '木', '金', '土'].map(d => (
                           <div key={d} className="calendar-day-label">{d}</div>
@@ -514,7 +493,7 @@ export default function Dashboard({ user, onLogout }) {
                               key={idx}
                               className={`calendar-cell ${isActive ? 'active' : ''} ${isSameDay(day, new Date()) ? 'today' : ''} ${hasTodos ? 'has-tasks' : ''}`}
                               onClick={() => setSelectedDate(dateStr)}
-                              style={{ color: !isSameMonth(day, currentMonth) ? '#ccc' : 'inherit' }}
+                              style={{ color: !isSameMonth(day, currentMonth) ? 'var(--tf-text-faint)' : 'inherit' }}
                             >
                               {format(day, 'd')}
                               {hasTodos && <div className={`task-indicator-dot priority-${maxPriority}`}></div>}
@@ -526,15 +505,15 @@ export default function Dashboard({ user, onLogout }) {
                     </div>
                   </section>
 
-                  <section className="score-summary-card" style={{ background: '#e0e7ff', color: '#5244e1' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <section className="score-summary-card">
+                    <div className="score-summary-head">
                       <Target size={20} />
-                      <h2 style={{ margin: 0, fontSize: '1rem', color: '#5244e1' }}>プロダクティビティスコア</h2>
+                      <h2>今週の達成ゲージ</h2>
                     </div>
-                    <div className="progress-bar" style={{ background: 'rgba(82, 68, 225, 0.1)' }}>
-                      <div className="progress-fill" style={{ width: `${completedPercentage}%`, background: '#5244e1' }}></div>
+                    <div className="progress-bar">
+                      <div className="progress-fill" style={{ width: `${completedPercentage}%` }}></div>
                     </div>
-                    <p style={{ fontSize: '0.75rem', fontWeight: 600, margin: 0 }}>週目標の {completedPercentage}% を達成しました。次の目標まであと3つのタスクです！</p>
+                    <p>進捗は {completedPercentage}%。未完了の {remainingTodosCount} 件を順番に片付けて連勝を作ろう。</p>
                   </section>
 
                   <section className="glass-card">
@@ -544,7 +523,7 @@ export default function Dashboard({ user, onLogout }) {
                     <div style={{ height: 150 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData}>
-                          <Line type="monotone" dataKey="score" stroke="#5244e1" strokeWidth={3} dot={false} />
+                          <Line type="monotone" dataKey="score" stroke="var(--tf-primary)" strokeWidth={3} dot={false} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -557,35 +536,35 @@ export default function Dashboard({ user, onLogout }) {
           {activeTab === 'analysis' && (
             <div className="analysis-view animate-fade-in">
               <div className="analysis-header mb-2">
-                <h1>URL Usage Summary</h1>
-                <p className="text-muted">Analyze your digital habits and optimize focus time.</p>
+                <h1>集中ログサマリー</h1>
+                <p className="text-muted">SNSの使い方を可視化して、勉強時間を取り戻そう。</p>
               </div>
 
               <div className="analysis-summary-grid mb-2">
                 <div className="summary-stat-card">
-                  <span className="label">Total Screen Time</span>
+                  <span className="label">総スクリーン時間</span>
                   <div className="value-group">
                     <span className="value">{formatTime(totalTimeInMinutes)}</span>
                     <span className="trend positive"><TrendingUp size={14} /> 4%</span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
-                  <span className="label">JPY Loss (Potential)</span>
+                  <span className="label">潜在ロス (JPY)</span>
                   <div className="value-group">
                     <span className="value">¥{jpyValue.toLocaleString()}</span>
                     <span className="trend negative"><TrendingDown size={14} /> 12%</span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
-                  <span className="label">BTC Loss (Potential)</span>
+                  <span className="label">潜在ロス (BTC)</span>
                   <div className="value-group">
                     <span className="value">{btcValue.toFixed(6)} BTC</span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
-                  <span className="label">Most Visited</span>
+                  <span className="label">最長滞在サイト</span>
                   <div className="value-group">
-                    <span className="value" style={{ fontSize: '1.1rem' }}>{sortedBreakdown[0]?.domain || 'N/A'}</span>
+                    <span className="value value-domain">{sortedBreakdown[0]?.domain || 'N/A'}</span>
                   </div>
                 </div>
               </div>
@@ -593,21 +572,21 @@ export default function Dashboard({ user, onLogout }) {
               <div className="analysis-main-grid">
                 <section className="glass-card chart-section">
                   <div className="card-header">
-                    <h2>Time Spent per Domain</h2>
+                    <h2>ドメイン別の滞在時間</h2>
                   </div>
                   <div style={{ height: 350, marginTop: '1rem' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={barChartData} layout="vertical" margin={{ left: 20, right: 30 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(148, 163, 184, 0.32)" />
                         <XAxis type="number" hide />
                         <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
                         <Tooltip
                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                          formatter={(value) => [`${value} min`, 'Usage Time']}
+                          formatter={(value) => [`${value} 分`, '滞在時間']}
                         />
                         <Bar dataKey="minutes" radius={[0, 4, 4, 0]} barSize={24}>
                           {barChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={index === 0 ? '#5244e1' : '#a5b4fc'} />
+                            <Cell key={`cell-${index}`} fill={index === 0 ? '#0f766e' : '#9ecfc6'} />
                           ))}
                         </Bar>
                       </BarChart>
@@ -617,30 +596,30 @@ export default function Dashboard({ user, onLogout }) {
 
                 <section className="glass-card table-section">
                   <div className="card-header" style={{ marginBottom: '1.5rem' }}>
-                    <h2>Top Domains Detail</h2>
+                    <h2>ドメイン詳細</h2>
                   </div>
                   <div className="domain-table-container">
                     <table className="domain-table">
                       <thead>
                         <tr>
-                          <th>DOMAIN</th>
-                          <th>TIME SPENT</th>
-                          <th>PERCENTAGE</th>
-                          <th>ACTION</th>
+                          <th>ドメイン</th>
+                          <th>滞在時間</th>
+                          <th>割合</th>
+                          <th>操作</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sortedBreakdown.map((site) => (
                           <tr key={site.domain}>
                             <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div className="domain-cell-main">
                                 <div className="domain-icon-wrapper">
                                   <Globe size={14} />
                                 </div>
-                                <span style={{ fontWeight: 700 }}>{site.domain}</span>
+                                <span className="domain-name">{site.domain}</span>
                               </div>
                             </td>
-                            <td style={{ fontWeight: 600 }}>{formatTime(site.timeSpent)}</td>
+                            <td className="domain-time">{formatTime(site.timeSpent)}</td>
                             <td>
                               <div className="percentage-container">
                                 <div className="percentage-bar">
@@ -667,8 +646,8 @@ export default function Dashboard({ user, onLogout }) {
           {activeTab === 'calendar' && (
             <div className="detailed-calendar">
               <div className="card-header">
-                <h2>カレンダー</h2>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <h2>月間ミッションカレンダー</h2>
+                <div className="calendar-nav-control">
                   <ChevronLeft className="cursor-pointer" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} />
                   <span style={{ fontWeight: 800, fontSize: '1.2rem' }}>{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
                   <ChevronRight className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
@@ -676,7 +655,7 @@ export default function Dashboard({ user, onLogout }) {
               </div>
               <div className="full-calendar-grid">
                 {['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'].map(d => (
-                  <div key={d} className="calendar-day-label" style={{ padding: '1rem', borderBottom: '1px solid var(--tf-border)' }}>{d}</div>
+                  <div key={d} className="calendar-day-label full-calendar-day-label">{d}</div>
                 ))}
                 {daysInMonth.map((day, idx) => {
                   const dayTodos = todosOnDay(day);
@@ -688,7 +667,7 @@ export default function Dashboard({ user, onLogout }) {
                           <div
                             key={todo.id}
                             className={`calendar-task-badge ${todo.completed ? 'completed' : ''}`}
-                            style={{ borderLeftColor: todo.priority === 'high' ? '#ef4444' : todo.priority === 'medium' ? '#f59e0b' : '#10b981', cursor: 'pointer' }}
+                            style={{ borderLeftColor: todo.priority === 'high' ? 'var(--tf-accent-red)' : todo.priority === 'medium' ? 'var(--tf-accent-amber)' : 'var(--tf-accent-lime)', cursor: 'pointer' }}
                             onClick={(e) => {
                               e.stopPropagation();
                               setViewingTask(todo);
@@ -719,18 +698,7 @@ export default function Dashboard({ user, onLogout }) {
             </div>
             <form onSubmit={handleAddTodo} className="modal-form">
               {isCreatingTodo && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.9rem 1rem',
-                    borderRadius: '12px',
-                    background: '#eef2ff',
-                    color: '#4338ca',
-                    fontWeight: 700,
-                  }}
-                >
+                <div className="saving-banner">
                   <LoaderCircle size={18} />
                   <span>タスクを保存しています...</span>
                 </div>
@@ -777,7 +745,7 @@ export default function Dashboard({ user, onLogout }) {
         <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div className="task-detail-title">
                 <span className={`priority-badge-${viewingTask.priority}`}>
                   {viewingTask.priority === 'high' ? '高' : viewingTask.priority === 'low' ? '低' : '中'}
                 </span>
@@ -808,7 +776,7 @@ export default function Dashboard({ user, onLogout }) {
 
               <div>
                 <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>詳細</label>
-                <div style={{ marginTop: '0.4rem', color: '#4b5563', lineHeight: 1.6 }}>
+                <div style={{ marginTop: '0.4rem', color: 'var(--tf-text-soft)', lineHeight: 1.6 }}>
                   {viewingTask.description || <span className="text-muted">（説明はありません）</span>}
                 </div>
               </div>
@@ -851,7 +819,7 @@ export default function Dashboard({ user, onLogout }) {
         .analysis-header h1 {
           font-size: 1.75rem;
           font-weight: 800;
-          color: #1a1d35;
+          color: var(--tf-text);
           margin-bottom: 0.25rem;
         }
         .analysis-summary-grid {
@@ -860,16 +828,16 @@ export default function Dashboard({ user, onLogout }) {
           gap: 1.5rem;
         }
         .summary-stat-card {
-          background: white;
+          background: rgba(255, 255, 255, 0.92);
           border-radius: 16px;
           padding: 1.5rem;
           box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-          border: 1px solid #f0f0f0;
+          border: 1px solid var(--tf-border);
         }
         .summary-stat-card .label {
           font-size: 0.8rem;
           font-weight: 700;
-          color: #8a8e9e;
+          color: var(--tf-text-muted);
           text-transform: uppercase;
           margin-bottom: 0.75rem;
           display: block;
@@ -882,7 +850,10 @@ export default function Dashboard({ user, onLogout }) {
         .summary-stat-card .value {
           font-size: 1.4rem;
           font-weight: 800;
-          color: #1a1d35;
+          color: var(--tf-text);
+        }
+        .summary-stat-card .value.value-domain {
+          font-size: 1.1rem;
         }
         .trend {
           font-size: 0.75rem;
@@ -893,8 +864,8 @@ export default function Dashboard({ user, onLogout }) {
           align-items: center;
           gap: 4px;
         }
-        .trend.positive { background: #ecfdf5; color: #10b981; }
-        .trend.negative { background: #fef2f2; color: #ef4444; }
+        .trend.positive { background: rgba(132, 204, 22, 0.2); color: #4d7c0f; }
+        .trend.negative { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
 
         .analysis-main-grid {
           display: grid;
@@ -911,24 +882,35 @@ export default function Dashboard({ user, onLogout }) {
           padding: 1rem;
           font-size: 0.75rem;
           font-weight: 800;
-          color: #8a8e9e;
+          color: var(--tf-text-muted);
           text-transform: uppercase;
-          border-bottom: 1px solid #f0f0f0;
+          border-bottom: 1px solid var(--tf-border);
         }
         .domain-table td {
           padding: 1rem;
-          border-bottom: 1px solid #f0f0f0;
+          border-bottom: 1px solid var(--tf-border);
           font-size: 0.9rem;
+        }
+        .domain-cell-main {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        .domain-name {
+          font-weight: 700;
+        }
+        .domain-time {
+          font-weight: 600;
         }
         .domain-icon-wrapper {
           width: 32px;
           height: 32px;
-          background: #f3f5f9;
+          background: rgba(15, 118, 110, 0.12);
           border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #5244e1;
+          color: var(--tf-primary);
         }
         .percentage-container {
           display: flex;
@@ -938,33 +920,33 @@ export default function Dashboard({ user, onLogout }) {
         .percentage-bar {
           flex: 1;
           height: 6px;
-          background: #f3f5f9;
+          background: rgba(148, 163, 184, 0.25);
           border-radius: 3px;
           overflow: hidden;
         }
         .percentage-fill {
           height: 100%;
-          background: #5244e1;
+          background: var(--tf-primary);
           border-radius: 3px;
         }
         .percentage-text {
           font-size: 0.75rem;
           font-weight: 800;
-          color: #8a8e9e;
+          color: var(--tf-text-muted);
           min-width: 30px;
         }
         .btn-domain-action {
-          background: #f3f5f9;
+          background: rgba(15, 118, 110, 0.1);
           border: none;
-          color: #8a8e9e;
+          color: var(--tf-text-muted);
           padding: 6px;
           border-radius: 8px;
           cursor: pointer;
           transition: all 0.2s;
         }
         .btn-domain-action:hover {
-          background: #e0e7ff;
-          color: #5244e1;
+          background: rgba(15, 118, 110, 0.2);
+          color: var(--tf-primary);
         }
         .animate-fade-in {
           animation: fadeIn 0.4s ease-out;

@@ -76,77 +76,70 @@ export default function LoginPage({ onLoginSuccess }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">
-          SNS Check
-        </h1>
+    <div className="auth-shell">
+      <div className="auth-panel">
+        <div className="auth-head">
+          <span className="auth-badge">MISSION CONTROL</span>
+          <h1 className="auth-brand">Focus Quest</h1>
+          <p className="auth-subtitle">ログインして、今日の集中ミッションを開始しよう。</p>
+        </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="auth-error">
+            <AlertCircle className="auth-error-icon" />
+            <p>{error}</p>
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+        <form onSubmit={handleLogin} className="auth-form">
+          <div className="auth-field">
+            <label htmlFor="email" className="auth-label">
               メールアドレス
             </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+            <div className="auth-input-wrap">
+              <Mail className="auth-input-icon" />
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="example@email.com"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="auth-input"
                 required
               />
             </div>
           </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="auth-field">
+            <label htmlFor="password" className="auth-label">
               パスワード
             </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+            <div className="auth-input-wrap">
+              <Lock className="auth-input-icon" />
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="auth-input"
                 required
               />
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-2 rounded-lg transition duration-200"
-          >
+          <button type="submit" disabled={loading} className="auth-btn auth-btn-primary">
             {loading ? 'ログイン中...' : 'ログイン'}
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-center text-sm text-gray-600 mb-4">
-            アカウントをお持ちでない場合
-          </p>
-          <button
-            onClick={handleSignUp}
-            disabled={loading}
-            className="w-full border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 font-semibold py-2 rounded-lg transition duration-200"
-          >
-            {loading ? '処理中...' : '新規登録'}
-          </button>
+        <div className="auth-divider">
+          <span>アカウントをお持ちでない場合</span>
         </div>
+
+        <button onClick={handleSignUp} disabled={loading} className="auth-btn auth-btn-secondary">
+          {loading ? '処理中...' : '新規登録'}
+        </button>
       </div>
     </div>
   );
