@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import {
   Calendar as CalendarIcon,
@@ -40,8 +40,6 @@ const API_BASE = (
     : '/api')
 ).replace(/\/$/, '');
 
-const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
-
 export default function Dashboard({ user, onLogout }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,14 +65,6 @@ export default function Dashboard({ user, onLogout }) {
   const latestFetchRequestIdRef = useRef(0);
   const togglingTodoSetRef = useRef(new Set());
 
-  // AI analysis states
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiResult, setAiResult] = useState(null); // { subtasks, complexity, totalEstimatedHours, tips }
-  const [aiError, setAiError] = useState(null);
-  const [selectedSubtasks, setSelectedSubtasks] = useState(new Set());
-  const [expandedSubtasks, setExpandedSubtasks] = useState(new Set()); // 親タスクIDのセット
-  const [analyzingTodoId, setAnalyzingTodoId] = useState(null); // 現在分析中の既存タスクID
-
   // Task detail states
   const [viewingTask, setViewingTask] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -85,7 +75,7 @@ export default function Dashboard({ user, onLogout }) {
     try {
       const res = await fetch(`${API_BASE}/dashboard`, {
         headers: {
-          'x-user-id': user?.id || DEFAULT_USER_ID,
+          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
         },
       });
       if (!res.ok) throw new Error('API request failed');
@@ -96,7 +86,7 @@ export default function Dashboard({ user, onLogout }) {
     } catch (err) {
       if (requestId !== latestFetchRequestIdRef.current) return;
       console.error(err);
-      setError('APIに接続できません。バックエンドが起動しているか確認してください。');
+      setError('API縺ｫ謗･邯壹〒縺阪∪縺帙ｓ縲ゅヰ繝・け繧ｨ繝ｳ繝峨′襍ｷ蜍輔＠縺ｦ縺・ｋ縺狗｢ｺ隱阪＠縺ｦ縺上□縺輔＞縲・);
     } finally {
       if (requestId !== latestFetchRequestIdRef.current) return;
       setIsLoading(false);
@@ -119,7 +109,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos`, {
         method: 'POST',
         headers: {
-          'x-user-id': user?.id || DEFAULT_USER_ID,
+          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -150,108 +140,6 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
-  // AIタスク分析ハンドラー
-  const handleAnalyzeTask = async (taskOrEvent = null) => {
-    // taskOrEvent が Event インスタンスなら null 扱いにする（引数なしの onClick で呼ばれた場合）
-    const existingTask = (taskOrEvent && taskOrEvent.nativeEvent) ? null : taskOrEvent;
-    
-    const title = existingTask ? existingTask.title : newTodoTitle;
-    const desc = existingTask ? existingTask.description : newTodoDesc;
-
-    if (!title || !title.trim() || isAnalyzing) return;
-    
-    setIsAnalyzing(true);
-    setAiResult(null);
-    setAiError(null);
-    setAnalyzingTodoId(existingTask ? existingTask.id : null);
-    
-    try {
-      const res = await fetch(`${API_BASE}/ai/analyze-task`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description: desc }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(res.status === 429 ? 'AIのリクエスト制限に達しました。1〜2分後に再試行してください。' : (errData.error || 'AI分析に失敗しました'));
-      }
-      const result = await res.json();
-      setAiResult(result);
-      setSelectedSubtasks(new Set(result.subtasks.map((_, i) => i)));
-      
-      // もし詳細モーダルから実行したなら、分析結果を表示するために
-      // UIの状態を調整する必要があるかもしれない（現状は新規タスクモーダルと同じUIパターンを利用）
-    } catch (e) {
-      console.error('AI Error:', e);
-      setAiError(e.message);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  // AIが提案したサブタスクをTodoとして一括保存
-  const handleSaveSubtasks = async () => {
-    if (!aiResult || selectedSubtasks.size === 0 || isCreatingTodo) return;
-    const toSave = aiResult.subtasks.filter((_, i) => selectedSubtasks.has(i));
-    setIsCreatingTodo(true);
-    try {
-      let parentId = analyzingTodoId;
-
-      // 既存タスクの分析でない場合は、まず親となるメインタスクを作成
-      if (!parentId) {
-        const parentResponse = await fetch(`${API_BASE}/todos`, {
-          method: 'POST',
-          headers: {
-            'x-user-id': user?.id || DEFAULT_USER_ID,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: newTodoTitle,
-            description: newTodoDesc || '[AI分析から生成された親タスク]',
-            priority: newTodoPriority,
-            dueDate: selectedDate,
-          }),
-        });
-
-        if (!parentResponse.ok) throw new Error('親タスクの作成に失敗しました');
-        const parentTask = await parentResponse.json();
-        parentId = parentTask.id;
-      }
-
-      // 2. 選択されたサブタスクを親子紐付け情報を付けて保存
-      for (const subtask of toSave) {
-        console.log('Adding subtask:', subtask);
-        const response = await fetch(`${API_BASE}/todos`, {
-          method: 'POST',
-          headers: { 'x-user-id': user?.id || DEFAULT_USER_ID, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: subtask.title,
-            // [parent:ID] プレフィックスを付けることで親子関係を表現
-            description: `[parent:${parentId}] [AI生成] 予想: ${subtask.estimatedHours}h / 優先度: ${subtask.priority}`,
-            priority: subtask.priority,
-            dueDate: selectedDate,
-          }),
-        });
-        if (!response.ok) {
-          const text = await response.text();
-          console.error(`Failed to add subtask "${subtask.title}":`, response.status, text);
-        }
-      }
-      setAiResult(null);
-      setAnalyzingTodoId(null);
-      setIsTaskModalOpen(false);
-      setIsDetailModalOpen(false); // 詳細モーダルからだった場合も閉じる
-      setNewTodoTitle('');
-      setNewTodoDesc('');
-      fetchData();
-    } catch (e) {
-      console.error('Error in handleSaveSubtasks:', e);
-      setAiError(e.message);
-    } finally {
-      setIsCreatingTodo(false);
-    }
-  };
-
   const handleToggleTodo = async (id, currentStatus) => {
     if (!id) return;
     if (togglingTodoSetRef.current.has(id)) return;
@@ -260,8 +148,7 @@ export default function Dashboard({ user, onLogout }) {
     togglingTodoSetRef.current.add(id);
     setTogglingTodoMap((prev) => ({ ...prev, [id]: true }));
 
-    // 楽観更新: 先にUI反映して体感速度を上げる
-    setData((prev) => {
+    // 讌ｽ隕ｳ譖ｴ譁ｰ: 蜈医↓UI蜿肴丐縺励※菴捺─騾溷ｺｦ繧剃ｸ翫￡繧・    setData((prev) => {
       if (!prev) return prev;
       const todos = Array.isArray(prev.todos) ? prev.todos : [];
       return {
@@ -281,7 +168,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'PUT',
         headers: {
-          'x-user-id': user?.id || DEFAULT_USER_ID,
+          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ completed: nextCompleted })
@@ -291,12 +178,12 @@ export default function Dashboard({ user, onLogout }) {
         throw new Error('Todo toggle failed');
       }
 
-      // サーバーの正本で同期
+      // 繧ｵ繝ｼ繝舌・縺ｮ豁｣譛ｬ縺ｧ蜷梧悄
       fetchData();
     } catch (e) {
       console.error(e);
 
-      // 失敗時はロールバック
+      // 螟ｱ謨玲凾縺ｯ繝ｭ繝ｼ繝ｫ繝舌ャ繧ｯ
       setData((prev) => {
         if (!prev) return prev;
         const todos = Array.isArray(prev.todos) ? prev.todos : [];
@@ -329,7 +216,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'DELETE',
         headers: {
-          'x-user-id': user?.id || DEFAULT_USER_ID,
+          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
         },
       });
 
@@ -352,7 +239,7 @@ export default function Dashboard({ user, onLogout }) {
       await fetch(`${API_BASE}/blacklist/${domain}`, {
         method: 'DELETE',
         headers: {
-          'x-user-id': user?.id || DEFAULT_USER_ID,
+          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
         },
       });
       fetchData();
@@ -382,41 +269,11 @@ export default function Dashboard({ user, onLogout }) {
     return data.todos.filter(t => t.dueDate === dateStr);
   };
 
-  // mini-calendar で選択した日付のタスクのみを表示し、未完了と優先度を上位に並べる
-  const filteredTodos = (data?.todos || [])
-    .filter((todo) => todo.dueDate === selectedDate);
-
-  // 親子関係を解析してグループ化
-  const groupedTasks = useMemo(() => {
-    const parents = [];
-    const childrenMap = {};
-
-    filteredTodos.forEach(todo => {
-      const match = todo.description?.match(/\[parent:([^\]]+)\]/);
-      if (match) {
-        const parentId = match[1];
-        if (!childrenMap[parentId]) childrenMap[parentId] = [];
-        childrenMap[parentId].push(todo);
-      } else {
-        parents.push(todo);
-      }
-    });
-
-    // 親タスクをソート
-    parents.sort((a, b) => {
-      if (a.completed !== b.completed) return a.completed ? 1 : -1;
-      const priorityRank = { high: 0, medium: 1, low: 2 };
-      return (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3);
-    });
-
-    return { parents, childrenMap };
-  }, [filteredTodos]);
-
-  if (isLoading) return <div className="loading">読み込み中...</div>;
+  if (isLoading) return <div className="loading">隱ｭ縺ｿ霎ｼ縺ｿ荳ｭ...</div>;
   if (error) return <div className="error-card">{error}</div>;
   if (!data) return null;
 
-  const productivityData = (data?.history || []).map(item => ({
+  const chartData = data.history.map(item => ({
     time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     score: item.score
   }));
@@ -429,16 +286,27 @@ export default function Dashboard({ user, onLogout }) {
     const target = new Date(date);
     target.setHours(0, 0, 0, 0);
 
-    if (isSameDay(target, today)) return { label: '今日', className: 'today' };
-    if (isSameDay(target, addDays(today, 1))) return { label: '明日', className: 'tomorrow' };
-    if (isSameDay(target, subDays(today, 1))) return { label: '昨日', className: 'overdue' };
+    if (isSameDay(target, today)) return { label: '莉頑律', className: 'today' };
+    if (isSameDay(target, addDays(today, 1))) return { label: '譏取律', className: 'tomorrow' };
+    if (isSameDay(target, subDays(today, 1))) return { label: '譏ｨ譌･', className: 'overdue' };
     if (target < today) return { label: format(target, 'M/d'), className: 'overdue' };
     return { label: format(target, 'M/d'), className: 'upcoming' };
   };
 
+  // mini-calendar 縺ｧ驕ｸ謚槭＠縺滓律莉倥・繧ｿ繧ｹ繧ｯ縺ｮ縺ｿ繧定｡ｨ遉ｺ縺励∵悴螳御ｺ・→蜆ｪ蜈亥ｺｦ繧剃ｸ贋ｽ阪↓荳ｦ縺ｹ繧・  const filteredTodos = data.todos
+    .filter((todo) => todo.dueDate === selectedDate)
+    .sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
 
-  const selectedDateRemainingCount = (data?.todos || []).filter((todo) => todo.dueDate === selectedDate && !todo.completed).length;
-  const remainingTodosCount = (data?.todos || []).filter(t => !t.completed).length;
+      const priorityRank = { high: 0, medium: 1, low: 2 };
+      const aPriority = priorityRank[a.priority] ?? 3;
+      const bPriority = priorityRank[b.priority] ?? 3;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+
+      return (a.title || '').localeCompare(b.title || '', 'ja');
+    });
+  const selectedDateRemainingCount = filteredTodos.filter((todo) => !todo.completed).length;
+  const remainingTodosCount = data.todos.filter(t => !t.completed).length;
 
   const missionProgress = data?.missionProgress || {};
   const goalTargets = Array.isArray(missionProgress.goals) && missionProgress.goals.length > 0
@@ -447,13 +315,13 @@ export default function Dashboard({ user, onLogout }) {
   const primaryGoal = goalTargets[0] || 3;
   const secondaryGoal = goalTargets[1] || 5;
 
-  const fallbackCompletedLifetime = (data?.todos || []).filter((todo) => todo.completed).length;
+  const fallbackCompletedLifetime = data.todos.filter((todo) => todo.completed).length;
   const completedLifetime = Number.isFinite(missionProgress.completedLifetime)
     ? missionProgress.completedLifetime
     : fallbackCompletedLifetime;
   const createdLifetime = Number.isFinite(missionProgress.createdLifetime)
     ? missionProgress.createdLifetime
-    : Math.max((data?.todos || []).length, completedLifetime);
+    : Math.max(data.todos.length, completedLifetime);
 
   const activeTarget = Number.isFinite(missionProgress.activeTarget)
     ? missionProgress.activeTarget
@@ -474,10 +342,13 @@ export default function Dashboard({ user, onLogout }) {
   const formatTime = (minutes) => {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
-    return h > 0 ? `${h}時間 ${m}分` : `${m}分`;
+    return h > 0 ? `${h}譎る俣 ${m}蛻・ : `${m}蛻・;
   };
 
-  const assetLossData = data?.hourlyStats || [];
+  const barChartData = sortedBreakdown.slice(0, 7).map(site => ({
+    name: site.domain,
+    minutes: site.timeSpent
+  }));
 
   const btcValue = typeof data?.assets?.btc === 'number' ? data.assets.btc : Number(data?.assets?.btc || 0);
   const jpyValue = data?.assets?.jpy || 0;
@@ -493,30 +364,30 @@ export default function Dashboard({ user, onLogout }) {
 
         <button className="btn-new-task-sidebar mb-2" onClick={() => setIsTaskModalOpen(true)}>
           <Plus size={18} />
-          <span>新規タスク作成</span>
+          <span>譁ｰ隕上ち繧ｹ繧ｯ菴懈・</span>
         </button>
 
-        <div className="sidebar-label">ワークスペース</div>
+        <div className="sidebar-label">繝ｯ繝ｼ繧ｯ繧ｹ繝壹・繧ｹ</div>
         <nav className="sidebar-nav">
           <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
             <HomeIcon size={18} />
-            <span>ミッション一覧</span>
+            <span>繝溘ャ繧ｷ繝ｧ繝ｳ荳隕ｧ</span>
             {remainingTodosCount > 0 && <span className="nav-count-pill">{remainingTodosCount}</span>}
           </div>
           <div className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
             <BarChart3 size={18} />
-            <span>集中ログ分析</span>
+            <span>髮・ｸｭ繝ｭ繧ｰ蛻・梵</span>
           </div>
           <div className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`} onClick={() => setActiveTab('calendar')}>
             <CalendarIcon size={18} />
-            <span>カレンダー計画</span>
+            <span>繧ｫ繝ｬ繝ｳ繝繝ｼ險育判</span>
           </div>
         </nav>
 
         <div className="sidebar-footer">
           <button onClick={handleLogout} className="btn-logout">
             <LogOut size={18} />
-            <span>ログアウト</span>
+            <span>繝ｭ繧ｰ繧｢繧ｦ繝・/span>
           </button>
         </div>
       </aside>
@@ -542,12 +413,11 @@ export default function Dashboard({ user, onLogout }) {
               {isWelcomeBannerVisible && (
                 <div className="welcome-banner">
                   <div className="welcome-copy">
-                    <h1>今日のフォーカスクエスト</h1>
-                    <p>未完了ミッションは {remainingTodosCount} 件。まずは 1 件クリアして勢いを作ろう。</p>
+                    <h1>莉頑律縺ｮ繝輔か繝ｼ繧ｫ繧ｹ繧ｯ繧ｨ繧ｹ繝・/h1>
+                    <p>譛ｪ螳御ｺ・Α繝・す繝ｧ繝ｳ縺ｯ {remainingTodosCount} 莉ｶ縲ゅ∪縺壹・ 1 莉ｶ繧ｯ繝ｪ繧｢縺励※蜍｢縺・ｒ菴懊ｍ縺・・/p>
                   </div>
                   <button onClick={() => setIsWelcomeBannerVisible(false)} className="welcome-close-btn">
-                    閉じる ✕
-                  </button>
+                    髢峨§繧・笨・                  </button>
                 </div>
               )}
 
@@ -560,120 +430,71 @@ export default function Dashboard({ user, onLogout }) {
                         <div className="task-card-icon">
                           <FileText size={18} />
                         </div>
-                        <h2>{format(new Date(`${selectedDate}T00:00:00`), 'M月 d日', { locale: ja })} のミッション</h2>
+                        <h2>{format(new Date(`${selectedDate}T00:00:00`), 'M譛・d譌･', { locale: ja })} 縺ｮ繝溘ャ繧ｷ繝ｧ繝ｳ</h2>
                       </div>
                       <div className="mission-head-right">
-                        <span className="mission-count-pill">残り {selectedDateRemainingCount} 件</span>
+                        <span className="mission-count-pill">谿九ｊ {selectedDateRemainingCount} 莉ｶ</span>
                         <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                          {format(new Date(`${selectedDate}T00:00:00`), 'yyyy年 M月 d日 (E)', { locale: ja })}
+                          {format(new Date(`${selectedDate}T00:00:00`), 'yyyy蟷ｴ M譛・d譌･ (E)', { locale: ja })}
                         </span>
                       </div>
                     </div>
 
                     <ul className="todo-list">
-                      {groupedTasks.parents.map((todo) => {
-                        const children = groupedTasks.childrenMap[todo.id] || [];
-                        const isExpanded = expandedSubtasks.has(todo.id);
-                        const hasChildren = children.length > 0;
-
-                        return (
-                          <div key={todo.id}>
-                            <li className={`todo-item ${todo.completed ? 'completed' : ''}`}>
-                              <div
-                                className="checkbox-custom"
-                                onClick={() => handleToggleTodo(todo.id, todo.completed)}
-                              >
-                                {todo.completed && <CheckCircle size={18} color="white" fill="white" />}
-                              </div>
-                              <div
-                                className="todo-content-wrapper"
-                                style={{ flex: 1, cursor: 'pointer' }}
-                                onClick={() => {
-                                  setViewingTask(todo);
-                                  setIsDetailModalOpen(true);
-                                }}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
-                                  {hasChildren && (
-                                    <button 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setExpandedSubtasks(prev => {
-                                          const next = new Set(prev);
-                                          next.has(todo.id) ? next.delete(todo.id) : next.add(todo.id);
-                                          return next;
-                                        });
-                                      }}
-                                      style={{ background: 'rgba(124, 58, 237, 0.1)', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.7rem', color: '#7c3aed', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                    >
-                                      {isExpanded ? '▲ 閉じる' : `▼ サブタスク(${children.length})`}
-                                    </button>
-                                  )}
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                                  {todo.tags?.map(tag => <span key={tag} className="tag" style={{ textTransform: 'uppercase' }}>{tag}</span>)}
-                                  <span className={`priority-tag ${todo.priority}`} style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#f1f5f9', fontWeight: 700 }}>{todo.priority.toUpperCase()}</span>
-                                  {todo.dueDate && (() => {
-                                    const rel = getRelativeDateLabel(todo.dueDate);
-                                    return (
-                                      <span className={`date-badge ${rel?.className}`}>
-                                        <Clock size={12} /> {rel?.label}
-                                      </span>
-                                    );
-                                  })()}
-                                </div>
-                                {todo.description && (
-                                  <div className="todo-description text-muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                                    {todo.description.replace(/\[parent:[^\]]+\]\s*/, '')}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex gap-2 items-center">
-                                {!todo.completed && (
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); handleAnalyzeTask(todo); setIsTaskModalOpen(true); }}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: '#7c3aed' }}
-                                    title="AIでタスク分析"
-                                  >
-                                    ✨
-                                  </button>
-                                )}
-                                <Trash2 size={18} className="text-muted cursor-pointer hover:text-red-500" onClick={() => handleDeleteTodo(todo.id)} />
-                                <MoreVertical size={18} className="text-muted cursor-pointer" />
-                              </div>
-                            </li>
-
-                            {/* サブタスクの表示 */}
-                            {hasChildren && isExpanded && (
-                              <div style={{ marginLeft: '2.5rem', borderLeft: '2px dashed #e2e8f0', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', marginBottom: '1rem' }}>
-                                {children.map(child => (
-                                  <li key={child.id} className={`todo-item subtask ${child.completed ? 'completed' : ''}`} style={{ padding: '0.75rem', fontSize: '0.9rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div className="checkbox-custom" onClick={() => handleToggleTodo(child.id, child.completed)}>
-                                      {child.completed && <CheckCircle size={16} color="white" fill="white" />}
-                                    </div>
-                                    <div className="todo-content-wrapper" style={{ flex: 1 }} onClick={() => { setViewingTask(child); setIsDetailModalOpen(true); }}>
-                                      <span className="todo-text" style={{ fontSize: '0.9rem', fontWeight: 600 }}>{child.title}</span>
-                                      {child.description && <p className="text-muted" style={{ fontSize: '0.75rem' }}>{child.description.replace(/\[parent:[^\]]+\]\s*/, '')}</p>}
-                                    </div>
-                                    <div className="flex gap-2 items-center">
-                                      <Trash2 size={16} className="text-muted cursor-pointer hover:text-red-500" onClick={() => handleDeleteTodo(child.id)} />
-                                    </div>
-                                  </li>
-                                ))}
-                              </div>
+                      {filteredTodos.map(todo => (
+                        <li key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
+                          <div
+                            className="checkbox-custom"
+                            onClick={() => !togglingTodoMap[todo.id] && handleToggleTodo(todo.id, todo.completed)}
+                            style={{ opacity: togglingTodoMap[todo.id] ? 0.7 : 1, pointerEvents: togglingTodoMap[todo.id] ? 'none' : 'auto' }}
+                          >
+                            {togglingTodoMap[todo.id] ? (
+                              <LoaderCircle size={16} />
+                            ) : (
+                              todo.completed && <CheckCircle size={18} color="white" fill="white" />
                             )}
                           </div>
-                        );
-                      })}
-                      {groupedTasks.parents.length === 0 && (
-                        <li className="mission-empty-state">
-                          この日はまだミッションがありません。右のカレンダーで別日を選ぶか、この日に新規タスクを追加しましょう。
+                          <div
+                            className="todo-content-wrapper"
+                            style={{ flex: 1, cursor: 'pointer' }}
+                            onClick={() => {
+                              setViewingTask(todo);
+                              setIsDetailModalOpen(true);
+                            }}
+                          >
+                            <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '0.25rem' }}>
+                              {todo.tags?.map(tag => <span key={tag} className="tag" style={{ textTransform: 'uppercase' }}>{tag}</span>)}
+                              {todo.dueDate && (() => {
+                                const rel = getRelativeDateLabel(todo.dueDate);
+                                return (
+                                  <span className={`date-badge ${rel.className}`}>
+                                    <Clock size={12} /> {rel.label}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                            {todo.description && <div className="todo-description text-muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{todo.description}</div>}
+                          </div>
+                          <div className="flex gap-2 items-center">
+                            {deletingTodoId === todo.id ? (
+                              <span className="status-inline">
+                                <LoaderCircle size={16} /> 蜑企勁荳ｭ...
+                              </span>
+                            ) : (
+                              <Trash2 size={18} className="text-muted cursor-pointer hover:text-red-500" onClick={() => handleDeleteTodo(todo.id)} />
+                            )}
+                            <MoreVertical size={18} className="text-muted cursor-pointer" />
+                          </div>
                         </li>
+                      ))}
+                      {filteredTodos.length === 0 && (
+                        <li className="mission-empty-state">
+                          縺薙・譌･縺ｯ縺ｾ縺繝溘ャ繧ｷ繝ｧ繝ｳ縺後≠繧翫∪縺帙ｓ縲ょ承縺ｮ繧ｫ繝ｬ繝ｳ繝繝ｼ縺ｧ蛻･譌･繧帝∈縺ｶ縺九√％縺ｮ譌･縺ｫ譁ｰ隕上ち繧ｹ繧ｯ繧定ｿｽ蜉縺励∪縺励ｇ縺・・                        </li>
                       )}
                       <div className="mt-2 text-center">
-                        <button className="add-task-inline" onClick={() => setIsTaskModalOpen(true)} style={{ background: 'none', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '8px', color: '#64748b', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                          <Plus size={16} /> この日にタスクを追加
+                        <button className="add-task-inline" onClick={() => setIsTaskModalOpen(true)}>
+                          <Plus size={16} /> 縺薙・譌･縺ｫ繧ｿ繧ｹ繧ｯ繧定ｿｽ蜉
                         </button>
                       </div>
                     </ul>
@@ -685,12 +506,12 @@ export default function Dashboard({ user, onLogout }) {
                   <section className="glass-card mini-calendar-card mb-2">
                     <div className="mini-calendar-header">
                       <ChevronLeft size={20} className="cursor-pointer" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} />
-                      <span className="mini-calendar-title">{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
+                      <span className="mini-calendar-title">{format(currentMonth, 'yyyy蟷ｴ M譛・, { locale: ja })}</span>
                       <ChevronRight size={20} className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
                     </div>
                     <div className="mini-calendar-body">
                       <div className="calendar-grid">
-                        {['日', '月', '火', '水', '木', '金', '土'].map(d => (
+                        {['譌･', '譛・, '轣ｫ', '豌ｴ', '譛ｨ', '驥・, '蝨・].map(d => (
                           <div key={d} className="calendar-day-label">{d}</div>
                         ))}
                         {daysInMonth.map((day, idx) => {
@@ -699,8 +520,7 @@ export default function Dashboard({ user, onLogout }) {
                           const dayTodos = todosOnDay(day);
                           const hasTodos = dayTodos.length > 0;
 
-                          // 最高優先度を判定
-                          let maxPriority = 'low';
+                          // 譛鬮伜━蜈亥ｺｦ繧貞愛螳・                          let maxPriority = 'low';
                           if (dayTodos.some(t => t.priority === 'high')) maxPriority = 'high';
                           else if (dayTodos.some(t => t.priority === 'medium')) maxPriority = 'medium';
 
@@ -724,28 +544,26 @@ export default function Dashboard({ user, onLogout }) {
                   <section className="score-summary-card">
                     <div className="score-summary-head">
                       <Target size={20} />
-                      <h2>固定目標チャレンジ</h2>
+                      <h2>蝗ｺ螳夂岼讓吶メ繝｣繝ｬ繝ｳ繧ｸ</h2>
                     </div>
                     <div className="score-goal-chip-wrap">
-                      <span className={`goal-chip ${primaryGoalAchieved ? 'done' : ''}`}>{primaryGoal}件クリア</span>
-                      <span className={`goal-chip ${secondaryGoalAchieved ? 'done' : ''}`}>{secondaryGoal}件クリア</span>
+                      <span className={`goal-chip ${primaryGoalAchieved ? 'done' : ''}`}>{primaryGoal}莉ｶ繧ｯ繝ｪ繧｢</span>
+                      <span className={`goal-chip ${secondaryGoalAchieved ? 'done' : ''}`}>{secondaryGoal}莉ｶ繧ｯ繝ｪ繧｢</span>
                     </div>
                     <div className="progress-bar">
                       <div className="progress-fill" style={{ width: `${activeProgress}%` }}></div>
                     </div>
                     <p>
-                      次の目標は {activeTarget} 件クリア。進捗は {activeProgress}%。
-                      累計クリア {completedLifetime} 件 / 累計作成 {createdLifetime} 件で行動を評価します。
-                    </p>
+                      谺｡縺ｮ逶ｮ讓吶・ {activeTarget} 莉ｶ繧ｯ繝ｪ繧｢縲るｲ謐励・ {activeProgress}%縲・                      邏ｯ險医け繝ｪ繧｢ {completedLifetime} 莉ｶ / 邏ｯ險井ｽ懈・ {createdLifetime} 莉ｶ縺ｧ陦悟虚繧定ｩ穂ｾ｡縺励∪縺吶・                    </p>
                   </section>
 
                   <section className="glass-card">
                     <div className="card-header">
-                      <h2>スコア履歴</h2>
+                      <h2>繧ｹ繧ｳ繧｢螻･豁ｴ</h2>
                     </div>
                     <div style={{ height: 150 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={productivityData}>
+                        <LineChart data={chartData}>
                           <Line type="monotone" dataKey="score" stroke="var(--tf-primary)" strokeWidth={3} dot={false} />
                         </LineChart>
                       </ResponsiveContainer>
@@ -759,33 +577,33 @@ export default function Dashboard({ user, onLogout }) {
           {activeTab === 'analysis' && (
             <div className="analysis-view animate-fade-in">
               <div className="analysis-header mb-2">
-                <h1>集中ログサマリー</h1>
-                <p className="text-muted">SNSの使い方を可視化して、勉強時間を取り戻そう。</p>
+                <h1>髮・ｸｭ繝ｭ繧ｰ繧ｵ繝槭Μ繝ｼ</h1>
+                <p className="text-muted">SNS縺ｮ菴ｿ縺・婿繧貞庄隕門喧縺励※縲∝級蠑ｷ譎る俣繧貞叙繧頑綾縺昴≧縲・/p>
               </div>
 
               <div className="analysis-summary-grid mb-2">
                 <div className="summary-stat-card">
-                  <span className="label">総スクリーン時間</span>
+                  <span className="label">邱上せ繧ｯ繝ｪ繝ｼ繝ｳ譎る俣</span>
                   <div className="value-group">
                     <span className="value">{formatTime(totalTimeInMinutes)}</span>
                     <span className="trend positive"><TrendingUp size={14} /> 4%</span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
-                  <span className="label">潜在ロス (JPY)</span>
+                  <span className="label">貎懷惠繝ｭ繧ｹ (JPY)</span>
                   <div className="value-group">
-                    <span className="value">¥{jpyValue.toLocaleString()}</span>
+                    <span className="value">ﾂ･{jpyValue.toLocaleString()}</span>
                     <span className="trend negative"><TrendingDown size={14} /> 12%</span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
-                  <span className="label">潜在ロス (BTC)</span>
+                  <span className="label">貎懷惠繝ｭ繧ｹ (BTC)</span>
                   <div className="value-group">
                     <span className="value">{btcValue.toFixed(6)} BTC</span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
-                  <span className="label">最長滞在サイト</span>
+                  <span className="label">譛髟ｷ貊槫惠繧ｵ繧､繝・/span>
                   <div className="value-group">
                     <span className="value value-domain">{sortedBreakdown[0]?.domain || 'N/A'}</span>
                   </div>
@@ -795,42 +613,40 @@ export default function Dashboard({ user, onLogout }) {
               <div className="analysis-main-grid">
                 <section className="glass-card chart-section">
                   <div className="card-header">
-                    <h2>24h Bitcoin Asset Erosion (Cumulative)</h2>
+                    <h2>繝峨Γ繧､繝ｳ蛻･縺ｮ貊槫惠譎る俣</h2>
                   </div>
-                    <div style={{ height: 350, marginTop: '1rem' }}>
+                  <div style={{ height: 350, marginTop: '1rem' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={assetLossData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
-                        <defs>
-                          <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.1}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                        <XAxis dataKey="label" tick={{ fontSize: 10, fontWeight: 700 }} />
-                        <YAxis tick={{ fontSize: 11 }} label={{ value: 'BTC Lost', angle: -90, position: 'insideLeft', offset: 15 }} />
+                      <BarChart data={barChartData} layout="vertical" margin={{ left: 20, right: 30 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(148, 163, 184, 0.32)" />
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
                         <Tooltip
                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                          formatter={(value) => [`${value.toFixed(8)} BTC`, 'Cumulative Loss']}
+                          formatter={(value) => [`${value} 蛻・, '貊槫惠譎る俣']}
                         />
-                        <Area type="monotone" dataKey="cumulativeLossBtc" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorLoss)" animationDuration={1500} />
-                      </AreaChart>
+                        <Bar dataKey="minutes" radius={[0, 4, 4, 0]} barSize={24}>
+                          {barChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={index === 0 ? '#0f766e' : '#9ecfc6'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </section>
 
                 <section className="glass-card table-section">
                   <div className="card-header" style={{ marginBottom: '1.5rem' }}>
-                    <h2>ドメイン詳細</h2>
+                    <h2>繝峨Γ繧､繝ｳ隧ｳ邏ｰ</h2>
                   </div>
                   <div className="domain-table-container">
                     <table className="domain-table">
                       <thead>
                         <tr>
-                          <th>ドメイン</th>
-                          <th>滞在時間</th>
-                          <th>割合</th>
-                          <th>操作</th>
+                          <th>繝峨Γ繧､繝ｳ</th>
+                          <th>貊槫惠譎る俣</th>
+                          <th>蜑ｲ蜷・/th>
+                          <th>謫堺ｽ・/th>
                         </tr>
                       </thead>
                       <tbody>
@@ -871,15 +687,15 @@ export default function Dashboard({ user, onLogout }) {
           {activeTab === 'calendar' && (
             <div className="detailed-calendar">
               <div className="card-header">
-                <h2>月間ミッションカレンダー</h2>
+                <h2>譛磯俣繝溘ャ繧ｷ繝ｧ繝ｳ繧ｫ繝ｬ繝ｳ繝繝ｼ</h2>
                 <div className="calendar-nav-control">
                   <ChevronLeft className="cursor-pointer" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} />
-                  <span style={{ fontWeight: 800, fontSize: '1.2rem' }}>{format(currentMonth, 'yyyy年 M月', { locale: ja })}</span>
+                  <span style={{ fontWeight: 800, fontSize: '1.2rem' }}>{format(currentMonth, 'yyyy蟷ｴ M譛・, { locale: ja })}</span>
                   <ChevronRight className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
                 </div>
               </div>
               <div className="full-calendar-grid">
-                {['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'].map(d => (
+                {['譌･譖懈律', '譛域屆譌･', '轣ｫ譖懈律', '豌ｴ譖懈律', '譛ｨ譖懈律', '驥第屆譌･', '蝨滓屆譌･'].map(d => (
                   <div key={d} className="calendar-day-label full-calendar-day-label">{d}</div>
                 ))}
                 {daysInMonth.map((day, idx) => {
@@ -902,7 +718,7 @@ export default function Dashboard({ user, onLogout }) {
                             {todo.title}
                           </div>
                         ))}
-                        {dayTodos.length > 3 && <div className="text-muted" style={{ fontSize: '0.6rem' }}>他 {dayTodos.length - 3} 件</div>}
+                        {dayTodos.length > 3 && <div className="text-muted" style={{ fontSize: '0.6rem' }}>莉・{dayTodos.length - 3} 莉ｶ</div>}
                       </div>
                     </div>
                   );
@@ -918,120 +734,48 @@ export default function Dashboard({ user, onLogout }) {
         <div className="modal-overlay" onClick={() => !isCreatingTodo && setIsTaskModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>新規タスク作成</h2>
+              <h2>譁ｰ隕上ち繧ｹ繧ｯ菴懈・</h2>
               <X className="cursor-pointer text-muted" onClick={() => !isCreatingTodo && setIsTaskModalOpen(false)} />
             </div>
             <form onSubmit={handleAddTodo} className="modal-form">
               {isCreatingTodo && (
                 <div className="saving-banner">
                   <LoaderCircle size={18} />
-                  <span>タスクを保存しています...</span>
+                  <span>繧ｿ繧ｹ繧ｯ繧剃ｿ晏ｭ倥＠縺ｦ縺・∪縺・..</span>
                 </div>
               )}
               <div className="form-group">
-                <label>タスク名</label>
-                <input type="text" value={newTodoTitle} onChange={(e) => setNewTodoTitle(e.target.value)} placeholder="タスク名を入力..." required disabled={isCreatingTodo} />
+                <label>繧ｿ繧ｹ繧ｯ蜷・/label>
+                <input type="text" value={newTodoTitle} onChange={(e) => setNewTodoTitle(e.target.value)} placeholder="繧ｿ繧ｹ繧ｯ蜷阪ｒ蜈･蜉・.." required disabled={isCreatingTodo} />
               </div>
               <div className="form-group">
-                <label>詳細説明</label>
-                <textarea value={newTodoDesc} onChange={(e) => setNewTodoDesc(e.target.value)} placeholder="詳細を入力..." rows="3" disabled={isCreatingTodo} />
+                <label>隧ｳ邏ｰ隱ｬ譏・/label>
+                <textarea value={newTodoDesc} onChange={(e) => setNewTodoDesc(e.target.value)} placeholder="隧ｳ邏ｰ繧貞・蜉・.." rows="3" disabled={isCreatingTodo} />
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label>期限日</label>
+                  <label>譛滄剞譌･</label>
                   <input type="date" value={newTodoDate} onChange={(e) => setNewTodoDate(e.target.value)} disabled={isCreatingTodo} />
                 </div>
                 <div className="form-group">
-                  <label>優先度</label>
+                  <label>蜆ｪ蜈亥ｺｦ</label>
                   <select value={newTodoPriority} onChange={(e) => setNewTodoPriority(e.target.value)} disabled={isCreatingTodo}>
-                    <option value="low">低</option>
-                    <option value="medium">中</option>
-                    <option value="high">高</option>
+                    <option value="low">菴・/option>
+                    <option value="medium">荳ｭ</option>
+                    <option value="high">鬮・/option>
                   </select>
                 </div>
               </div>
               <div className="form-group">
-                <label>タグ (カンマ区切り)</label>
-                <input type="text" value={newTodoTags} onChange={(e) => setNewTodoTags(e.target.value)} placeholder="仕事, UI, バグ" disabled={isCreatingTodo} />
+                <label>繧ｿ繧ｰ (繧ｫ繝ｳ繝槫玄蛻・ｊ)</label>
+                <input type="text" value={newTodoTags} onChange={(e) => setNewTodoTags(e.target.value)} placeholder="莉穂ｺ・ UI, 繝舌げ" disabled={isCreatingTodo} />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setIsTaskModalOpen(false)} disabled={isCreatingTodo}>キャンセル</button>
-                <button
-                  type="button"
-                  onClick={handleAnalyzeTask}
-                  disabled={isAnalyzing || !newTodoTitle.trim() || isCreatingTodo}
-                  style={{
-                    background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '0 1rem',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    opacity: isAnalyzing || !newTodoTitle.trim() ? 0.6 : 1,
-                  }}
-                >
-                  {isAnalyzing ? '✨ 分析中...' : '✨ AIで分析'}
-                </button>
+                <button type="button" className="btn-cancel" onClick={() => setIsTaskModalOpen(false)} disabled={isCreatingTodo}>繧ｭ繝｣繝ｳ繧ｻ繝ｫ</button>
                 <button type="submit" className="btn-submit" disabled={isCreatingTodo}>
-                  {isCreatingTodo ? '保存中...' : '作成'}
+                  {isCreatingTodo ? '菫晏ｭ倅ｸｭ...' : '菴懈・'}
                 </button>
               </div>
-
-              {/* AIエラー表示 */}
-              {aiError && (
-                <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: '0.85rem', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  ⚠️ {aiError}
-                </div>
-              )}
-
-              {/* AI分析結果の表示 */}
-              {aiResult && (
-                <div style={{ marginTop: '1rem', background: 'rgba(109,40,217,0.07)', border: '1px solid rgba(109,40,217,0.25)', borderRadius: '12px', padding: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                    <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#7c3aed' }}>✨ AIが提案するサブタスク</span>
-                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                      複雑度: {aiResult.complexity} / 合計 {aiResult.totalEstimatedHours}h
-                    </span>
-                  </div>
-                  {aiResult.tips && (
-                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem', fontStyle: 'italic' }}>
-                      💡 {aiResult.tips}
-                    </div>
-                  )}
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {aiResult.subtasks.map((st, i) => (
-                      <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: 'white', borderRadius: '8px', border: '1px solid rgba(109,40,217,0.15)', cursor: 'pointer' }}
-                        onClick={() => setSelectedSubtasks(prev => {
-                          const next = new Set(prev);
-                          next.has(i) ? next.delete(i) : next.add(i);
-                          return next;
-                        })}
-                      >
-                        <span style={{ width: '18px', height: '18px', borderRadius: '4px', border: '2px solid #7c3aed', background: selectedSubtasks.has(i) ? '#7c3aed' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          {selectedSubtasks.has(i) && <span style={{ color: 'white', fontSize: '12px' }}>✓</span>}
-                        </span>
-                        <span style={{ flex: 1, fontWeight: 600, fontSize: '0.88rem' }}>{st.title}</span>
-                        <span style={{ fontSize: '0.75rem', color: st.priority === 'high' ? '#ef4444' : st.priority === 'medium' ? '#f59e0b' : '#94a3b8', fontWeight: 700 }}>
-                          {st.priority === 'high' ? '高' : st.priority === 'medium' ? '中' : '低'}
-                        </span>
-                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{st.estimatedHours}h</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    type="button"
-                    onClick={handleSaveSubtasks}
-                    disabled={selectedSubtasks.size === 0 || isCreatingTodo}
-                    style={{ marginTop: '0.75rem', width: '100%', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', padding: '0.6rem', fontWeight: 700, cursor: 'pointer', opacity: selectedSubtasks.size === 0 ? 0.5 : 1 }}
-                  >
-                    {isCreatingTodo ? '保存中...' : `選択した ${selectedSubtasks.size} 件をTodoに追加`}
-                  </button>
-                </div>
-              )}
             </form>
           </div>
         </div>
@@ -1044,21 +788,21 @@ export default function Dashboard({ user, onLogout }) {
             <div className="modal-header">
               <div className="task-detail-title">
                 <span className={`priority-badge-${viewingTask.priority}`}>
-                  {viewingTask.priority === 'high' ? '高' : viewingTask.priority === 'low' ? '低' : '中'}
+                  {viewingTask.priority === 'high' ? '鬮・ : viewingTask.priority === 'low' ? '菴・ : '荳ｭ'}
                 </span>
-                <h2 style={{ margin: 0 }}>タスク詳細</h2>
+                <h2 style={{ margin: 0 }}>繧ｿ繧ｹ繧ｯ隧ｳ邏ｰ</h2>
               </div>
               <X className="cursor-pointer text-muted" onClick={() => setIsDetailModalOpen(false)} />
             </div>
 
             <div className="task-detail-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
-                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>タスク名</label>
+                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>繧ｿ繧ｹ繧ｯ蜷・/label>
                 <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '0.4rem' }}>{viewingTask.title}</div>
               </div>
 
               <div>
-                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>期限</label>
+                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>譛滄剞</label>
                 <div style={{ marginTop: '0.4rem' }}>
                   {viewingTask.dueDate ? (() => {
                     const rel = getRelativeDateLabel(viewingTask.dueDate);
@@ -1067,14 +811,14 @@ export default function Dashboard({ user, onLogout }) {
                         <Clock size={14} /> {viewingTask.dueDate} ({rel.label})
                       </span>
                     );
-                  })() : <span className="text-muted">未設定</span>}
+                  })() : <span className="text-muted">譛ｪ險ｭ螳・/span>}
                 </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>詳細</label>
+                <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>隧ｳ邏ｰ</label>
                 <div style={{ marginTop: '0.4rem', color: 'var(--tf-text-soft)', lineHeight: 1.6 }}>
-                  {viewingTask.description || <span className="text-muted">（説明はありません）</span>}
+                  {viewingTask.description || <span className="text-muted">・郁ｪｬ譏弱・縺ゅｊ縺ｾ縺帙ｓ・・/span>}
                 </div>
               </div>
 
@@ -1088,7 +832,7 @@ export default function Dashboard({ user, onLogout }) {
                     setIsDetailModalOpen(false);
                   }}
                 >
-                  {deletingTodoId === viewingTask.id ? '削除中...' : '削除する'}
+                  {deletingTodoId === viewingTask.id ? '蜑企勁荳ｭ...' : '蜑企勁縺吶ｋ'}
                 </button>
                 <button
                   className="btn-submit"
@@ -1099,23 +843,10 @@ export default function Dashboard({ user, onLogout }) {
                     setIsDetailModalOpen(false);
                   }}
                 >
-                   {togglingTodoMap[viewingTask.id]
-                    ? '更新中...'
-                    : (viewingTask.completed ? '未完了に戻す' : '完了にする')}
+                  {togglingTodoMap[viewingTask.id]
+                    ? '譖ｴ譁ｰ荳ｭ...'
+                    : (viewingTask.completed ? '譛ｪ螳御ｺ・↓謌ｻ縺・ : '螳御ｺ・↓縺吶ｋ')}
                 </button>
-                {!viewingTask.completed && (
-                  <button
-                    className="btn-submit"
-                    style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', opacity: isAnalyzing ? 0.7 : 1 }}
-                    disabled={isAnalyzing}
-                    onClick={() => {
-                      handleAnalyzeTask(viewingTask);
-                      setIsTaskModalOpen(true);
-                    }}
-                  >
-                    {isAnalyzing ? '✨ 分析中...' : '✨ AIで分析'}
-                  </button>
-                )}
               </div>
             </div>
           </div>

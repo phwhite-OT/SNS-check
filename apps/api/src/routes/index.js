@@ -26,6 +26,7 @@ const {
 const { postTime } = require('../controllers/timeController');
 const { postHistory } = require('../controllers/historyController');
 const { getDashboard } = require('../controllers/dashboardController');
+const { postAnalyzeTask } = require('../controllers/aiController');
 const authRouter = require('./auth');
 
 const router = express.Router();
@@ -77,5 +78,8 @@ router.post('/history', asyncHandler(postHistory));
 
 // ダッシュボード情報の取得
 router.get('/dashboard', asyncHandler(getDashboard));
+
+// AIによるタスク分析
+router.post('/ai/analyze-task', asyncHandler(postAnalyzeTask));
 
 module.exports = { apiRouter: router };
