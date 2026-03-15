@@ -12,9 +12,10 @@ require('dotenv').config({
 });
 
 const env = {
-    SUPABASE_URL: process.env.SUPABASE_URL || '',
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-    DEFAULT_USER_ID: process.env.DEFAULT_USER_ID || '00000000-0000-0000-0000-000000000000',
+    // 予備のデフォルト値（.envがない場合のフォールバック）
+    SUPABASE_URL: process.env.SUPABASE_URL || 'https://fcccnvzfiywlmiyyvlrb.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZjY2NudnpmaXl3bG1peXl2bHJiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzQzNTk4MiwiZXhwIjoyMDg5MDExOTgyfQ.H_00TPMMwQe5CkxHBJpiIGXE4Cv6QvxZV3JwL0LSCu4',
+    DEFAULT_USER_ID: process.env.DEFAULT_USER_ID || 'b186ec48-06dd-4844-b29d-ab987e2b5989',
     DEFAULT_SCORE_BASE: Number(process.env.DEFAULT_SCORE_BASE || 1000),
     SCORE_RECOVERY_PER_DONE_TODO: Number(process.env.SCORE_RECOVERY_PER_DONE_TODO || 50),
     SCORE_BONUS_PER_CREATED_TODO: Number(process.env.SCORE_BONUS_PER_CREATED_TODO || 10),
