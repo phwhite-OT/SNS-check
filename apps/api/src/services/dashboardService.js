@@ -52,6 +52,12 @@ async function getDashboard(userId) {
         return acc;
     }, {});
 
+    const visitCounts = sessions.reduce((acc, row) => {
+        const key = row.domain;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {});
+
     const totalTimeSeconds = Object.values(timeData).reduce((sum, sec) => sum + sec, 0);
     const currentCreatedCount = todos.length;
     const currentCompletedCount = todos.filter((todo) => todo.completed).length;
@@ -100,8 +106,49 @@ async function getDashboard(userId) {
 
     const siteBreakdown = Object.entries(timeData).map(([domain, seconds]) => ({
         domain,
-        timeSpent: Math.floor(seconds / 60)
+        timeSpent: Math.floor(seconds / 60),
+        visits: visitCounts[domain] || 0
     }));
+
+    // --- 過去24時間の時間別累積損失（BTC）の計算 ---
+    const btcPrice = assets.btcPriceJpy || 10000000;
+    const hourlyWageJpy = env.HOURLY_WAGE_JPY;
+    
+    // 24時間分のバケットを用意
+    const now = new Date();
+    const hourlyBuckets = [];
+    for (let i = 23; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 3600 * 1000);
+        d.setMinutes(0, 0, 0);
+        hourlyBuckets.push({
+            timestamp: d.getTime(),
+            label: `${d.getHours()}:00`,
+            lossBtc: 0
+        });
+    }
+
+    // 各セッションをバケットに振り分け
+    sessions.forEach(session => {
+        const sessionTime = session.started_at || session.created_at;
+        const startTime = new Date(sessionTime).getTime();
+        const bucket = hourlyBuckets.find(b => startTime >= b.timestamp && startTime < b.timestamp + 3600 * 1000);
+        if (bucket) {
+            const duration = Number(session.duration_sec) > 0 ? Number(session.duration_sec) : 120; // 0秒なら2分と仮定
+            const jpyLoss = (duration / 3600) * hourlyWageJpy;
+            const btcLoss = btcPrice > 0 ? (jpyLoss / btcPrice) : 0;
+            bucket.lossBtc += btcLoss;
+        }
+    });
+
+    // 累積和に変換
+    let cumulativeLoss = 0;
+    const hourlyStats = hourlyBuckets.map(bucket => {
+        cumulativeLoss += bucket.lossBtc;
+        return {
+            ...bucket,
+            cumulativeLossBtc: Number(cumulativeLoss.toFixed(8))
+        };
+    });
 
     return {
         score,
@@ -122,6 +169,7 @@ async function getDashboard(userId) {
         blacklist,
         timeData,
         siteBreakdown,
+        hourlyStats,
         totalTimeSeconds,
         assets,
     };

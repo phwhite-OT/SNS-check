@@ -24,6 +24,7 @@ const {
     deleteCalendarEvent,
 } = require('../controllers/calendarEventsController');
 const { postTime } = require('../controllers/timeController');
+const { postHistory } = require('../controllers/historyController');
 const { getDashboard } = require('../controllers/dashboardController');
 const authRouter = require('./auth');
 
@@ -70,6 +71,9 @@ router.delete('/calendar-events/:id', asyncHandler(deleteCalendarEvent));
 
 // 時間計測データの受信とダッシュボード情報の取得
 router.post('/time', asyncHandler(postTime));
+
+// 過去の閲覧履歴の受信
+router.post('/history', asyncHandler(postHistory));
 
 // ダッシュボード情報の取得
 router.get('/dashboard', asyncHandler(getDashboard));
