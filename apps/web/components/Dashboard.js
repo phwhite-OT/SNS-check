@@ -187,6 +187,10 @@ export default function Dashboard({ user, onLogout }) {
   const allTasksListRef = useRef(null);
   const allTasksHadOverflowRef = useRef(false);
 
+  // Blacklist states
+  const [blacklistInput, setBlacklistInput] = useState('');
+  const [blacklistActionDomain, setBlacklistActionDomain] = useState(null);
+
   // Fetch data (with user ID from auth)
   const fetchData = async () => {
     if (isDemoMode) {
@@ -481,16 +485,89 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
-  const handleDeleteBlacklist = async (domain) => {
+  const handleAddBlacklist = async (inputOrEvent) => {
+    if (inputOrEvent && typeof inputOrEvent.preventDefault === 'function') {
+      inputOrEvent.preventDefault();
+    }
+
+    const rawDomain = (inputOrEvent && typeof inputOrEvent.preventDefault === 'function')
+      ? newBlacklistDomain
+      : inputOrEvent;
+
+    const normalized = normalizeDomainInput(rawDomain);
+    if (!isValidDomainCandidate(normalized)) {
+      setBlacklistError('有効なドメインを入力してください（例: youtube.com）。');
+      return;
+    }
+
+    if (blacklistBusy) return;
+
+    setBlacklistBusy(true);
+    setBlacklistActionDomain(normalized);
+    setBlacklistError('');
+
     try {
-      await fetch(`${API_BASE}/blacklist/${domain}`, {
+      const response = await fetch(`${apiBase}/blacklist`, {
+        method: 'POST',
+        headers: {
+          'x-user-id': user?.id || DEFAULT_USER_ID,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ domain: normalized }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error || 'ドメイン追加に失敗しました。');
+      }
+
+      if (inputOrEvent && typeof inputOrEvent.preventDefault === 'function') {
+        setNewBlacklistDomain('');
+      }
+      setBlacklistInput('');
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      setBlacklistError(e.message || 'ドメイン追加に失敗しました。');
+    } finally {
+      setBlacklistActionDomain(null);
+      setBlacklistBusy(false);
+    }
+  };
+
+  const handleDeleteBlacklist = async (domain) => {
+    const normalized = normalizeDomainInput(domain);
+    if (!isValidDomainCandidate(normalized)) {
+      return;
+    }
+
+    if (blacklistBusy) return;
+
+    setBlacklistBusy(true);
+    setBlacklistActionDomain(normalized);
+    setBlacklistError('');
+
+    try {
+      const response = await fetch(`${apiBase}/blacklist/${encodeURIComponent(normalized)}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
-      fetchData();
-    } catch (e) { console.error(e); }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error || 'ドメイン削除に失敗しました。');
+      }
+
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      setBlacklistError(e.message || 'ドメイン削除に失敗しました。');
+    } finally {
+      setBlacklistActionDomain(null);
+      setBlacklistBusy(false);
+    }
   };
 
   const fetchFocusMode = async () => {
