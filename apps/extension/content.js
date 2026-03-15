@@ -1,24 +1,58 @@
 // 🕵️ Dashboardから同期用データを取得するスクリプト
 (function () {
-    const syncEl = document.getElementById('extension-sync-data');
-    if (syncEl) {
-        const userId = syncEl.getAttribute('data-user-id');
-        const apiUrl = syncEl.getAttribute('data-api-url');
+    let lastSentUserId = null;
+    let lastSentApiUrl = null;
 
-        if (userId || apiUrl) {
-            console.log('🔄 Dashboard sync data detected:', { userId, apiUrl });
-            
-            // 背景（background.js）に保存を依頼
-            chrome.runtime.sendMessage({
+    function sendSyncConfig(userId, apiUrl) {
+        if (!userId && !apiUrl) return;
+
+        if (lastSentUserId === userId && lastSentApiUrl === apiUrl) {
+            return;
+        }
+
+        lastSentUserId = userId;
+        lastSentApiUrl = apiUrl;
+
+        chrome.runtime.sendMessage(
+            {
                 type: 'sync:config',
                 config: { userId, apiUrl }
-            }, (response) => {
+            },
+            (response) => {
                 if (chrome.runtime.lastError) {
-                    console.error('Failed to send sync message:', chrome.runtime.lastError);
-                } else if (response?.success) {
-                    console.log('✅ Extension configuration synchronized automatically.');
+                    console.error('Failed to send sync message:', chrome.runtime.lastError.message);
+                    return;
                 }
-            });
-        }
+            }
+        );
     }
+
+    function trySyncFromDom() {
+        const syncEl = document.getElementById('extension-sync-data');
+        if (!syncEl) return false;
+
+        const userId = (syncEl.getAttribute('data-user-id') || '').trim();
+        const apiUrl = (syncEl.getAttribute('data-api-url') || '').trim();
+        sendSyncConfig(userId || null, apiUrl || null);
+        return true;
+    }
+
+    // 即時試行（静的HTML向け）
+    trySyncFromDom();
+
+    // Reactレンダリング後に要素が出るケースに対応
+    const observer = new MutationObserver(() => {
+        trySyncFromDom();
+    });
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-user-id', 'data-api-url']
+    });
+
+    // 念のためロード完了後にも再試行
+    window.addEventListener('load', () => {
+        trySyncFromDom();
+    });
 })();

@@ -34,14 +34,26 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-const API_BASE = (
-  process.env.NEXT_PUBLIC_API_BASE ||
-  (process.env.NEXT_PUBLIC_API_URL
-    ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`
-    : '/api')
-).replace(/\/$/, '');
-const FOCUS_MODE_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+const DEFAULT_APP_ORIGIN = 'https://sns-check.onrender.com';
 
+function resolveApiBase() {
+  if (process.env.NEXT_PUBLIC_API_BASE) {
+    return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, '');
+  }
+
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`;
+  }
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return '/api';
+    }
+  }
+
+  return `${DEFAULT_APP_ORIGIN}/api`;
+}
 const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 
@@ -57,6 +69,18 @@ function resolveAllTasksFoldHeight(viewportHeight) {
 }
 
 export default function Dashboard({ user, onLogout }) {
+  const apiBase = useMemo(() => resolveApiBase(), []);
+  const extensionAppOrigin = useMemo(() => {
+    if (apiBase === '/api') {
+      if (typeof window !== 'undefined') {
+        return window.location.origin;
+      }
+      return '';
+    }
+
+    return apiBase.replace(/\/api$/, '');
+  }, [apiBase]);
+  const focusModeUserId = user?.id || DEFAULT_USER_ID;
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -74,6 +98,9 @@ export default function Dashboard({ user, onLogout }) {
   const [newTodoDate, setNewTodoDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isWelcomeBannerVisible, setIsWelcomeBannerVisible] = useState(true);
+  const [newBlacklistDomain, setNewBlacklistDomain] = useState('');
+  const [blacklistBusy, setBlacklistBusy] = useState(false);
+  const [blacklistError, setBlacklistError] = useState('');
 
   // Focus mode states
   const [focusModeEnabled, setFocusModeEnabled] = useState(false);
@@ -111,7 +138,7 @@ export default function Dashboard({ user, onLogout }) {
   const fetchData = async () => {
     const requestId = ++latestFetchRequestIdRef.current;
     try {
-      const res = await fetch(`${API_BASE}/dashboard`, {
+      const res = await fetch(`${apiBase}/dashboard`, {
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
         },
@@ -139,7 +166,7 @@ export default function Dashboard({ user, onLogout }) {
       fetchFocusMode();
     }, 5000);
     return () => clearInterval(intervalId);
-  }, [user]);
+  }, [user, apiBase]);
 
   useEffect(() => {
     const ticker = setInterval(() => setNow(Date.now()), 1000);
@@ -153,7 +180,7 @@ export default function Dashboard({ user, onLogout }) {
     const tagsArray = newTodoTags.split(',').map(tag => tag.trim()).filter(Boolean);
     setIsCreatingTodo(true);
     try {
-      const response = await fetch(`${API_BASE}/todos`, {
+      const response = await fetch(`${apiBase}/todos`, {
         method: 'POST',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -206,7 +233,7 @@ export default function Dashboard({ user, onLogout }) {
     }
     
     try {
-      const res = await fetch(`${API_BASE}/ai/analyze-task`, {
+      const res = await fetch(`${apiBase}/ai/analyze-task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, description: desc }),
@@ -239,7 +266,7 @@ export default function Dashboard({ user, onLogout }) {
 
       // 既存タスクの分析でない場合は、まず親となるメインタスクを作成
       if (!parentId) {
-        const parentResponse = await fetch(`${API_BASE}/todos`, {
+        const parentResponse = await fetch(`${apiBase}/todos`, {
           method: 'POST',
           headers: {
             'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -261,7 +288,7 @@ export default function Dashboard({ user, onLogout }) {
       // 2. 選択されたサブタスクを親子紐付け情報を付けて保存
       for (const subtask of toSave) {
         console.log('Adding subtask:', subtask);
-        const response = await fetch(`${API_BASE}/todos`, {
+        const response = await fetch(`${apiBase}/todos`, {
           method: 'POST',
           headers: { 'x-user-id': user?.id || DEFAULT_USER_ID, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -318,7 +345,7 @@ export default function Dashboard({ user, onLogout }) {
     });
 
     try {
-      const response = await fetch(`${API_BASE}/todos/${id}`, {
+      const response = await fetch(`${apiBase}/todos/${id}`, {
         method: 'PUT',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -366,7 +393,7 @@ export default function Dashboard({ user, onLogout }) {
     if (!id || deletingTodoId === id) return;
     setDeletingTodoId(id);
     try {
-      const response = await fetch(`${API_BASE}/todos/${id}`, {
+      const response = await fetch(`${apiBase}/todos/${id}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -388,22 +415,63 @@ export default function Dashboard({ user, onLogout }) {
   };
 
   const handleDeleteBlacklist = async (domain) => {
+    setBlacklistError('');
+    setBlacklistBusy(true);
     try {
-      await fetch(`${API_BASE}/blacklist/${domain}`, {
+      const response = await fetch(`${apiBase}/blacklist/${encodeURIComponent(domain)}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
+
+      if (!response.ok) {
+        throw new Error('Blacklist delete failed');
+      }
+
       fetchData();
     } catch (e) { console.error(e); }
+    finally {
+      setBlacklistBusy(false);
+    }
+  };
+
+  const handleAddBlacklist = async (event) => {
+    event.preventDefault();
+
+    if (!newBlacklistDomain.trim() || blacklistBusy) return;
+
+    setBlacklistError('');
+    setBlacklistBusy(true);
+    try {
+      const response = await fetch(`${apiBase}/blacklist`, {
+        method: 'POST',
+        headers: {
+          'x-user-id': user?.id || DEFAULT_USER_ID,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ domain: newBlacklistDomain.trim() }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Blacklist create failed');
+      }
+
+      setNewBlacklistDomain('');
+      fetchData();
+    } catch (e) {
+      console.error(e);
+      setBlacklistError('ブラックリストの更新に失敗しました。');
+    } finally {
+      setBlacklistBusy(false);
+    }
   };
 
   const fetchFocusMode = async () => {
     try {
-      const res = await fetch(`${API_BASE}/focus-mode`, {
+      const res = await fetch(`${apiBase}/focus-mode`, {
         headers: {
-          'x-user-id': FOCUS_MODE_USER_ID,
+          'x-user-id': focusModeUserId,
         },
       });
       if (!res.ok) return;
@@ -420,11 +488,11 @@ export default function Dashboard({ user, onLogout }) {
     if (focusModeLoading) return;
     setFocusModeLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/focus-mode`, {
+      const res = await fetch(`${apiBase}/focus-mode`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': FOCUS_MODE_USER_ID,
+          'x-user-id': focusModeUserId,
         },
         body: JSON.stringify({ enabled: !focusModeEnabled }),
       });
@@ -623,6 +691,12 @@ export default function Dashboard({ user, onLogout }) {
 
   return (
     <div className="app-container">
+      <div
+        id="extension-sync-data"
+        data-user-id={focusModeUserId}
+        data-api-url={extensionAppOrigin}
+        style={{ display: 'none' }}
+      />
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">
@@ -1040,6 +1114,101 @@ export default function Dashboard({ user, onLogout }) {
                           <Line type="monotone" dataKey="score" stroke="var(--tf-primary)" strokeWidth={3} dot={false} />
                         </LineChart>
                       </ResponsiveContainer>
+                    </div>
+                  </section>
+
+                  <section className="glass-card" style={{ marginTop: '0.75rem' }}>
+                    <div className="card-header">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Globe size={18} color="var(--tf-primary)" />
+                        <h2>ブラックリスト管理</h2>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleAddBlacklist} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.9rem' }}>
+                      <input
+                        type="text"
+                        value={newBlacklistDomain}
+                        onChange={(e) => setNewBlacklistDomain(e.target.value)}
+                        placeholder="例: facebook.com"
+                        disabled={blacklistBusy}
+                        style={{
+                          flex: 1,
+                          height: '40px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--tf-border)',
+                          padding: '0 0.8rem',
+                          fontSize: '0.9rem',
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={blacklistBusy || !newBlacklistDomain.trim()}
+                        style={{
+                          border: 'none',
+                          borderRadius: '10px',
+                          padding: '0 0.9rem',
+                          fontWeight: 700,
+                          color: '#fff',
+                          background: 'linear-gradient(135deg, var(--tf-primary), var(--tf-primary-light))',
+                          cursor: blacklistBusy ? 'not-allowed' : 'pointer',
+                          opacity: blacklistBusy || !newBlacklistDomain.trim() ? 0.6 : 1,
+                        }}
+                      >
+                        追加
+                      </button>
+                    </form>
+
+                    {blacklistError && (
+                      <p style={{ margin: '0 0 0.8rem', color: '#dc2626', fontSize: '0.82rem', fontWeight: 700 }}>
+                        {blacklistError}
+                      </p>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                      {(data?.blacklist || []).length > 0 ? (
+                        (data.blacklist || []).map((item) => (
+                          <div
+                            key={item.domain}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '0.75rem',
+                              padding: '0.7rem 0.8rem',
+                              borderRadius: '12px',
+                              background: 'rgba(255,255,255,0.78)',
+                              border: '1px solid var(--tf-border)',
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.9rem', overflowWrap: 'anywhere' }}>{item.domain}</div>
+                              <div style={{ fontSize: '0.76rem', color: 'var(--tf-text-muted)' }}>{item.name}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteBlacklist(item.domain)}
+                              disabled={blacklistBusy}
+                              style={{
+                                border: '1px solid rgba(220,38,38,0.2)',
+                                background: 'rgba(220,38,38,0.06)',
+                                color: '#b91c1c',
+                                borderRadius: '10px',
+                                padding: '0.45rem 0.7rem',
+                                fontWeight: 700,
+                                cursor: blacklistBusy ? 'not-allowed' : 'pointer',
+                                flexShrink: 0,
+                              }}
+                            >
+                              削除
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="mission-empty-state">
+                          ブラックリストはまだありません。ドメインを追加すると集中モード中にロックされます。
+                        </div>
+                      )}
                     </div>
                   </section>
                 </div>
