@@ -40,8 +40,6 @@ const API_BASE = (
     ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`
     : '/api')
 ).replace(/\/$/, '');
-const FOCUS_MODE_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
-
 const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 
@@ -499,7 +497,7 @@ export default function Dashboard({ user, onLogout }) {
     try {
       const res = await fetch(`${API_BASE}/focus-mode`, {
         headers: {
-          'x-user-id': FOCUS_MODE_USER_ID,
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
       if (!res.ok) return;
@@ -520,7 +518,7 @@ export default function Dashboard({ user, onLogout }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': FOCUS_MODE_USER_ID,
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
         body: JSON.stringify({ enabled: !focusModeEnabled }),
       });
