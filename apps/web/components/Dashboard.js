@@ -259,6 +259,11 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
+  const goToDashboardByDate = (dateStr) => {
+    setSelectedDate(dateStr);
+    setActiveTab('dashboard');
+  };
+
   // Calendar Helpers
   const daysInMonth = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentMonth));
@@ -702,14 +707,29 @@ export default function Dashboard({ user, onLogout }) {
                   <ChevronRight className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
                 </div>
               </div>
+              <p className="detailed-calendar-tip">日付セルをクリックすると、その日のミッション一覧へ移動します。</p>
               <div className="full-calendar-grid">
                 {['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'].map(d => (
                   <div key={d} className="calendar-day-label full-calendar-day-label">{d}</div>
                 ))}
                 {daysInMonth.map((day, idx) => {
+                  const dateStr = format(day, 'yyyy-MM-dd');
                   const dayTodos = todosOnDay(day);
+                  const isSelected = selectedDate === dateStr;
                   return (
-                    <div key={idx} className={`full-calendar-cell ${!isSameMonth(day, currentMonth) ? 'bg-slate-50 opacity-40' : ''}`} onClick={() => { setSelectedDate(format(day, 'yyyy-MM-dd')); }}>
+                    <div
+                      key={idx}
+                      className={`full-calendar-cell ${isSelected ? 'is-selected' : ''} ${!isSameMonth(day, currentMonth) ? 'bg-slate-50 opacity-40' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => goToDashboardByDate(dateStr)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          goToDashboardByDate(dateStr);
+                        }
+                      }}
+                    >
                       <div className="full-calendar-day-num">{format(day, 'd')}</div>
                       <div className="full-calendar-tasks">
                         {dayTodos.slice(0, 3).map(todo => (

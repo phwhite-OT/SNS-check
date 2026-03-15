@@ -1130,6 +1130,13 @@ h3,
   gap: 1rem;
 }
 
+.detailed-calendar-tip {
+  margin: -0.35rem 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--tf-text-muted);
+}
+
 .calendar-nav-control {
   display: flex;
   align-items: center;
@@ -1157,6 +1164,22 @@ h3,
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.full-calendar-cell:hover {
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.full-calendar-cell:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.45);
+  outline-offset: -2px;
+}
+
+.full-calendar-cell.is-selected {
+  background: rgba(15, 118, 110, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.35);
 }
 
 .full-calendar-day-num {
@@ -1522,6 +1545,10 @@ h3,
 
   .detailed-calendar {
     padding: 1rem;
+  }
+
+  .detailed-calendar-tip {
+    margin-top: -0.2rem;
   }
 
   .score-goal-chip-wrap {
