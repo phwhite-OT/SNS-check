@@ -7,9 +7,9 @@
  */
 const { app } = require('./src/app');
 
-const INTERNAL_PORT = 3001;
-const INTERNAL_HOST = '127.0.0.1';
+const INTERNAL_PORT = process.env.PORT || 3001;
+const INTERNAL_HOST = '0.0.0.0';
 
 app.listen(INTERNAL_PORT, INTERNAL_HOST, () => {
-  console.log(`API Server running internally on http://${INTERNAL_HOST}:${INTERNAL_PORT}`);
+  console.log(`API Server running on http://${INTERNAL_HOST}:${INTERNAL_PORT}`);
 });
