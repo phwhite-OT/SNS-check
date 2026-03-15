@@ -201,6 +201,9 @@ export default function Dashboard({ user, onLogout }) {
     setAiResult(null);
     setAiError(null);
     setAnalyzingTodoId(existingTask ? existingTask.id : null);
+    if (existingTask && existingTask.dueDate) {
+      setNewTodoDate(existingTask.dueDate);
+    }
     
     try {
       const res = await fetch(`${API_BASE}/ai/analyze-task`, {
@@ -246,7 +249,7 @@ export default function Dashboard({ user, onLogout }) {
             title: newTodoTitle,
             description: newTodoDesc || '[AI分析から生成された親タスク]',
             priority: newTodoPriority,
-            dueDate: selectedDate,
+            dueDate: newTodoDate,
           }),
         });
 
@@ -266,7 +269,7 @@ export default function Dashboard({ user, onLogout }) {
             // [parent:ID] プレフィックスを付けることで親子関係を表現
             description: `[parent:${parentId}] [AI生成] 予想: ${subtask.estimatedHours}h / 優先度: ${subtask.priority}`,
             priority: subtask.priority,
-            dueDate: selectedDate,
+            dueDate: newTodoDate,
           }),
         });
         if (!response.ok) {
@@ -627,7 +630,10 @@ export default function Dashboard({ user, onLogout }) {
           <span>Focus Quest</span>
         </div>
 
-        <button className="btn-new-task-sidebar mb-2" onClick={() => setIsTaskModalOpen(true)}>
+        <button className="btn-new-task-sidebar mb-2" onClick={() => {
+          setNewTodoDate(selectedDate);
+          setIsTaskModalOpen(true);
+        }}>
           <Plus size={18} />
           <span>新規タスク作成</span>
         </button>
@@ -808,7 +814,10 @@ export default function Dashboard({ user, onLogout }) {
                         </li>
                       )}
                       <div className="mt-2 text-center">
-                        <button className="add-task-inline" onClick={() => setIsTaskModalOpen(true)} style={{ background: 'none', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '8px', color: '#64748b', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <button className="add-task-inline" onClick={() => {
+                          setNewTodoDate(selectedDate);
+                          setIsTaskModalOpen(true);
+                        }} style={{ background: 'none', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '8px', color: '#64748b', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                           <Plus size={16} /> この日にタスクを追加
                         </button>
                       </div>
