@@ -16,7 +16,7 @@ Example `.env.production`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-NEXT_PUBLIC_API_BASE=https://your-api.example.com/api
+NEXT_PUBLIC_API_URL=https://your-api.example.com
 ```
 
 ## 3. Login to Cloudflare

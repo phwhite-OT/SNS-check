@@ -32,7 +32,10 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_BASE ||
+  `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/$/, '')}/api`
+).replace(/\/$/, '');
 
 export default function Dashboard({ user, onLogout }) {
   const [data, setData] = useState(null);
@@ -51,6 +54,7 @@ export default function Dashboard({ user, onLogout }) {
   const [newTodoPriority, setNewTodoPriority] = useState('medium');
   const [newTodoDate, setNewTodoDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isWelcomeBannerVisible, setIsWelcomeBannerVisible] = useState(true);
   
   // Task detail states
   const [viewingTask, setViewingTask] = useState(null);
@@ -302,13 +306,20 @@ export default function Dashboard({ user, onLogout }) {
           {activeTab === 'dashboard' && (
             <>
               {/* Welcome Banner */}
-              <div className="welcome-banner">
-                <div style={{ flex: 1 }}>
-                  <h1>お帰りなさい！</h1>
-                  <p>今日は {remainingTodosCount} 個のタスクが残っています。頑張りましょう！</p>
+              {isWelcomeBannerVisible && (
+                <div className="welcome-banner">
+                  <div style={{ flex: 1 }}>
+                    <h1>お帰りなさい！</h1>
+                    <p>今日は {remainingTodosCount} 個のタスクが残っています。頑張りましょう！</p>
+                  </div>
+                  <button
+                    onClick={() => setIsWelcomeBannerVisible(false)}
+                    style={{ background: 'transparent', border: 'none', color: 'white', opacity: 0.8, cursor: 'pointer' }}
+                  >
+                    閉じる ✕
+                  </button>
                 </div>
-                <button style={{ background: 'transparent', border: 'none', color: 'white', opacity: 0.8, cursor: 'pointer' }}>閉じる ✕</button>
-              </div>
+              )}
 
               <div className="dashboard-grid">
                 {/* Left Column */}

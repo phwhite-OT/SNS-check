@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from 'react';
 
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_BASE ||
+  `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/$/, '')}/api`
+).replace(/\/$/, '');
+
 // 縺薙・ Home() 縺ｨ縺・≧髢｢謨ｰ縺後ム繝・す繝･繝懊・繝峨・繝｡繧､繝ｳ逕ｻ髱｢繧剃ｽ懊▲縺ｦ縺・∪縺・export default function Home() {
   // 逃 逕ｻ髱｢縺ｫ陦ｨ遉ｺ縺吶ｋ迥ｶ諷具ｼ医ョ繝ｼ繧ｿ・峨ｒ菫晏ｭ倥☆繧狗ｮｱ・・tate・峨ｒ逕ｨ諢上＠縺ｾ縺・  const [dashboardData, setDashboardData] = useState(null); // 蜿門ｾ励＠縺溘ョ繝ｼ繧ｿ繧貞・繧後ｋ邂ｱ
   const [isLoading, setIsLoading] = useState(true);         // 隱ｭ縺ｿ霎ｼ縺ｿ荳ｭ縺九←縺・°繧貞愛螳壹☆繧九ヵ繝ｩ繧ｰ
@@ -12,7 +17,7 @@ import { useEffect, useState } from 'react';
     const fetchData = async () => {
       try {
         // 繝舌ャ繧ｯ繧ｨ繝ｳ繝陰PI縺ｫ縲後ョ繝ｼ繧ｿ縺｡繧・≧縺縺・ｼ√阪→縺企｡倥＞縺吶ｋ
-        const res = await fetch('http://localhost:3001/api/dashboard');
+        const res = await fetch(`${API_BASE}/dashboard`);
 
         // 繧ゅ＠縺・∪縺冗ｹ九′繧峨↑縺九▲縺溘ｉ繧ｨ繝ｩ繝ｼ縺ｫ縺吶ｋ
         if (!res.ok) throw new Error('API request failed');

@@ -2,7 +2,10 @@
 # Required by Next.js routes running on Workers.
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-NEXT_PUBLIC_API_BASE=https://your-api.example.com/api
+NEXT_PUBLIC_API_URL=https://your-api.example.com
+
+# Backward compatibility (optional)
+# NEXT_PUBLIC_API_BASE=https://your-api.example.com/api
 
 # Only needed by server-side API routes in apps/web/app/api/auth/*
 SUPABASE_URL=https://your-project.supabase.co
