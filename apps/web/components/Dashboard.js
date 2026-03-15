@@ -51,6 +51,91 @@ function toDueTimestamp(dueDate) {
   return Number.isFinite(ts) ? ts : Number.POSITIVE_INFINITY;
 }
 
+const DEMO_DATA = {
+  score: 850,
+  history: Array.from({ length: 24 }, (_, i) => ({
+    timestamp: Date.now() - (23 - i) * 3600000,
+    score: 700 + Math.floor(Math.random() * 200)
+  })),
+  todos: [
+    { id: 'd1', title: '【重要】最終レポートの構成作成', completed: false, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: '章立てと参考文献のリストアップ [estimate:120]' },
+    { id: 'd2', title: '英単語ターゲット1900 1-200復習', completed: true, priority: 'medium', dueDate: format(new Date(), 'yyyy-MM-dd'), description: 'アプリで確認 [estimate:30]' },
+    { id: 'd3', title: '数学IIB 演習問題 15-20', completed: false, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: 'Focus Goldを使用 [estimate:90]' },
+    { id: 'd4', title: 'TOEIC公式問題集 パート5', completed: false, priority: 'medium', dueDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'), description: '時間を測って解く [estimate:45]' },
+    { id: 'd5', title: 'サークル勧誘チラシの修正', completed: true, priority: 'low', dueDate: format(subDays(new Date(), 1), 'yyyy-MM-dd'), description: 'QRコードの差し替え [estimate:60]' },
+    { id: 'd6', title: 'バイトのシフト提出', completed: true, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: 'LINEで店長に送信 [estimate:10]' }
+  ],
+  missionProgress: {
+    goals: [3, 5],
+    activeTarget: 5,
+    activeProgress: 60,
+    createdLifetime: 124,
+    completedLifetime: 75,
+    persistence: 'database',
+    byGoal: [
+      { target: 3, progress: 100, achieved: true },
+      { target: 5, progress: 60, achieved: false }
+    ]
+  },
+  blacklist: [
+    { domain: 'youtube.com' },
+    { domain: 'twitter.com' },
+    { domain: 'instagram.com' },
+    { domain: 'tiktok.com' }
+  ],
+  siteBreakdown: [
+    { domain: 'youtube.com', timeSpent: 145, visits: 12 },
+    { domain: 'twitter.com', timeSpent: 82, visits: 24 },
+    { domain: 'instagram.com', timeSpent: 45, visits: 8 },
+    { domain: 'tiktok.com', timeSpent: 30, visits: 5 }
+  ],
+  totalTimeSeconds: 18120, // 約5時間
+  hourlyStats: Array.from({ length: 24 }).map((_, i) => {
+    const hoursAgo = 23 - i;
+    const date = new Date(Date.now() - hoursAgo * 3600 * 1000);
+    date.setMinutes(0, 0, 0);
+    
+    // デモ用のイベント生成: 15分使用 (¥300ロス) で統一し、傾きを一定にする
+    const hasSnsUsage = (i % 3 === 0); // 3時間おきに使用
+    const baseLoss = hasSnsUsage ? 300 : 0;
+    const events = [];
+    if (hasSnsUsage) {
+      const domains = ['youtube.com', 'twitter.com', 'instagram.com', 'tiktok.com'];
+      const randomDomain = domains[i % domains.length];
+      events.push({ type: 'loss', name: randomDomain, jpy: -baseLoss });
+    }
+    if (i === 15) events.push({ type: 'gain', name: '✓ 英単語ターゲット1900 1-200復習', jpy: 600 });
+    if (i === 20) events.push({ type: 'gain', name: '✓ サークル勧誘チラシの修正', jpy: 1200 });
+
+    return {
+      timestamp: date.getTime(),
+      label: `${date.getHours()}:00`,
+      lossJpy: baseLoss,
+      gainJpy: (i === 10 ? 200 : i === 15 ? 600 : i === 20 ? 1200 : 0),
+      events
+    };
+  }).reduce((acc, curr, i) => {
+    const prevLoss = i > 0 ? acc[i - 1].cumulativeLossJpy : 0;
+    const prevNet = i > 0 ? acc[i - 1].netBalance : 0;
+    
+    curr.cumulativeLossJpy = prevLoss + curr.lossJpy;
+    curr.netBalance = prevNet + curr.gainJpy - curr.lossJpy;
+    
+    acc.push(curr);
+    return acc;
+  }, []),
+  assets: {
+    jpy: 6840,
+    btc: 0.00000045,
+    btcPriceJpy: 15200000
+  }
+};
+
+const parseEstimate = (desc) => {
+  const match = desc?.match(/\[estimate:(\d+)\]/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
 function resolveAllTasksFoldHeight(viewportHeight) {
   if (!Number.isFinite(viewportHeight) || viewportHeight <= 0) return 340;
   return Math.max(260, Math.min(420, Math.floor(viewportHeight * 0.42)));
@@ -60,6 +145,7 @@ export default function Dashboard({ user, onLogout }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Layout states
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'calendar', 'analysis'
@@ -72,6 +158,7 @@ export default function Dashboard({ user, onLogout }) {
   const [newTodoTags, setNewTodoTags] = useState('');
   const [newTodoPriority, setNewTodoPriority] = useState('medium');
   const [newTodoDate, setNewTodoDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [newTodoEstimate, setNewTodoEstimate] = useState(''); // 分単位
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isWelcomeBannerVisible, setIsWelcomeBannerVisible] = useState(true);
 
@@ -109,6 +196,11 @@ export default function Dashboard({ user, onLogout }) {
 
   // Fetch data (with user ID from auth)
   const fetchData = async () => {
+    if (isDemoMode) {
+      setData(DEMO_DATA);
+      setIsLoading(false);
+      return;
+    }
     const requestId = ++latestFetchRequestIdRef.current;
     try {
       const res = await fetch(`${API_BASE}/dashboard`, {
@@ -139,7 +231,7 @@ export default function Dashboard({ user, onLogout }) {
       fetchFocusMode();
     }, 5000);
     return () => clearInterval(intervalId);
-  }, [user]);
+  }, [user, isDemoMode]);
 
   useEffect(() => {
     const ticker = setInterval(() => setNow(Date.now()), 1000);
@@ -153,6 +245,7 @@ export default function Dashboard({ user, onLogout }) {
     const tagsArray = newTodoTags.split(',').map(tag => tag.trim()).filter(Boolean);
     setIsCreatingTodo(true);
     try {
+      const finalDesc = newTodoEstimate ? `${newTodoDesc} [estimate:${newTodoEstimate}]` : newTodoDesc;
       const response = await fetch(`${API_BASE}/todos`, {
         method: 'POST',
         headers: {
@@ -162,7 +255,7 @@ export default function Dashboard({ user, onLogout }) {
         body: JSON.stringify({
           title: newTodoTitle,
           dueDate: newTodoDate,
-          description: newTodoDesc,
+          description: finalDesc,
           tags: tagsArray,
           priority: newTodoPriority
         })
@@ -178,6 +271,7 @@ export default function Dashboard({ user, onLogout }) {
       setNewTodoDesc('');
       setNewTodoTags('');
       setNewTodoPriority('medium');
+      setNewTodoEstimate('');
       setIsTaskModalOpen(false);
       fetchData();
     } catch (e) {
@@ -217,6 +311,9 @@ export default function Dashboard({ user, onLogout }) {
       }
       const result = await res.json();
       setAiResult(result);
+      if (result.totalEstimatedHours) {
+        setNewTodoEstimate(Math.round(result.totalEstimatedHours * 60));
+      }
       setSelectedSubtasks(new Set(result.subtasks.map((_, i) => i)));
       
       // もし詳細モーダルから実行したなら、分析結果を表示するために
@@ -239,19 +336,22 @@ export default function Dashboard({ user, onLogout }) {
 
       // 既存タスクの分析でない場合は、まず親となるメインタスクを作成
       if (!parentId) {
-        const parentResponse = await fetch(`${API_BASE}/todos`, {
-          method: 'POST',
-          headers: {
-            'x-user-id': user?.id || DEFAULT_USER_ID,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: newTodoTitle,
-            description: newTodoDesc || '[AI分析から生成された親タスク]',
-            priority: newTodoPriority,
-            dueDate: newTodoDate,
-          }),
-        });
+          const parentDesc = newTodoEstimate 
+            ? `${newTodoDesc || '[AI分析から生成された親タスク]'} [estimate:${newTodoEstimate}]`
+            : (newTodoDesc || '[AI分析から生成された親タスク]');
+          const parentResponse = await fetch(`${API_BASE}/todos`, {
+            method: 'POST',
+            headers: {
+              'x-user-id': user?.id || DEFAULT_USER_ID,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              title: newTodoTitle,
+              description: parentDesc,
+              priority: newTodoPriority,
+              dueDate: newTodoDate,
+            }),
+          });
 
         if (!parentResponse.ok) throw new Error('親タスクの作成に失敗しました');
         const parentTask = await parentResponse.json();
@@ -266,8 +366,8 @@ export default function Dashboard({ user, onLogout }) {
           headers: { 'x-user-id': user?.id || DEFAULT_USER_ID, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: subtask.title,
-            // [parent:ID] プレフィックスを付けることで親子関係を表現
-            description: `[parent:${parentId}] [AI生成] 予想: ${subtask.estimatedHours}h / 優先度: ${subtask.priority}`,
+            // [parent:ID] プレフィックスを付けることで親子関係を表現。 [estimate:X] で報酬計算に対応
+            description: `[parent:${parentId}] [estimate:${Math.round(subtask.estimatedHours * 60)}] [AI生成] 予想: ${subtask.estimatedHours}h / 優先度: ${subtask.priority}`,
             priority: subtask.priority,
             dueDate: newTodoDate,
           }),
@@ -283,6 +383,7 @@ export default function Dashboard({ user, onLogout }) {
       setIsDetailModalOpen(false); // 詳細モーダルからだった場合も閉じる
       setNewTodoTitle('');
       setNewTodoDesc('');
+      setNewTodoEstimate('');
       fetchData();
     } catch (e) {
       console.error('Error in handleSaveSubtasks:', e);
@@ -549,14 +650,58 @@ export default function Dashboard({ user, onLogout }) {
     };
   }, [allTodosSorted, activeTab]);
 
+  // Derived data (Define BEFORE early returns to satisfy Hook rules)
+  const productivityData = useMemo(() => {
+    return (data?.history || []).map(item => ({
+      time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      score: item.score
+    }));
+  }, [data?.history]);
+
+  // Analysis Page Data
+  const siteBreakdown = data?.siteBreakdown || [];
+  const sortedBreakdown = useMemo(() => {
+    return [...siteBreakdown].sort((a, b) => b.timeSpent - a.timeSpent);
+  }, [siteBreakdown]);
+
+  const totalTimeInMinutes = siteBreakdown.reduce((acc, curr) => acc + curr.timeSpent, 0);
+  const totalTimeSeconds = data?.totalTimeSeconds || (totalTimeInMinutes * 60);
+
+  const totalRecoveredJpy = useMemo(() => {
+    return (data?.todos || [])
+      .filter(t => t.completed)
+      .reduce((sum, t) => sum + (parseEstimate(t.description) / 60) * 1200, 0);
+  }, [data?.todos]);
+
+  const assetLossData = useMemo(() => {
+    const stats = (data?.hourlyStats || []);
+    return stats.map((item) => {
+      // バックエンドが netBalance を持っている場合はそれを利用、なければフロントで計算
+      const loss = (item.cumulativeLossJpy || 0);
+      return {
+        ...item,
+        netBalance: item.netBalance !== undefined ? item.netBalance : (totalRecoveredJpy - loss)
+      };
+    });
+  }, [data?.hourlyStats, totalRecoveredJpy]);
+
+  const off = useMemo(() => {
+    if (!assetLossData.length) return 0;
+    const dataMax = Math.max(...assetLossData.map((i) => i.netBalance || 0), 0);
+    const dataMin = Math.min(...assetLossData.map((i) => i.netBalance || 0), 0);
+
+    if (dataMax <= 0) return 0;
+    if (dataMin >= 0) return 1;
+
+    return dataMax / (dataMax - dataMin);
+  }, [assetLossData]);
+
+  const btcValue = typeof data?.assets?.btc === 'number' ? data.assets.btc : Number(data?.assets?.btc || 0);
+  const jpyValue = data?.assets?.jpy || 0;
+
   if (isLoading) return <div className="loading">読み込み中...</div>;
   if (error) return <div className="error-card">{error}</div>;
   if (!data) return null;
-
-  const productivityData = (data?.history || []).map(item => ({
-    time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    score: item.score
-  }));
 
   const getRelativeDateLabel = (dateStr) => {
     if (!dateStr) return null;
@@ -572,7 +717,6 @@ export default function Dashboard({ user, onLogout }) {
     if (target < today) return { label: format(target, 'M/d'), className: 'overdue' };
     return { label: format(target, 'M/d'), className: 'upcoming' };
   };
-
 
   const selectedDateRemainingCount = (data?.todos || []).filter((todo) => todo.dueDate === selectedDate && !todo.completed).length;
   const remainingTodosCount = (data?.todos || []).filter(t => !t.completed).length;
@@ -602,22 +746,12 @@ export default function Dashboard({ user, onLogout }) {
   const primaryGoalAchieved = completedLifetime >= primaryGoal;
   const secondaryGoalAchieved = completedLifetime >= secondaryGoal;
 
-  // Analysis Page Data
-  const siteBreakdown = data?.siteBreakdown || [];
-  const sortedBreakdown = [...siteBreakdown].sort((a, b) => b.timeSpent - a.timeSpent);
-  const totalTimeInMinutes = siteBreakdown.reduce((acc, curr) => acc + curr.timeSpent, 0);
-  const totalTimeSeconds = data?.totalTimeSeconds || (totalTimeInMinutes * 60);
-
   const formatTime = (minutes) => {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return h > 0 ? `${h}時間 ${m}分` : `${m}分`;
   };
 
-  const assetLossData = data?.hourlyStats || [];
-
-  const btcValue = typeof data?.assets?.btc === 'number' ? data.assets.btc : Number(data?.assets?.btc || 0);
-  const jpyValue = data?.assets?.jpy || 0;
   const remainSec = focusModeEndsAt ? Math.max(0, Math.floor((focusModeEndsAt - now) / 1000)) : 0;
   const remainText = `${Math.floor(remainSec / 60)}:${String(remainSec % 60).padStart(2, '0')}`;
 
@@ -625,9 +759,9 @@ export default function Dashboard({ user, onLogout }) {
     <div className="app-container">
       {/* Sidebar */}
       <aside className="sidebar">
-        <div className="sidebar-logo">
+        <div className="sidebar-logo" onClick={() => setIsDemoMode(!isDemoMode)} style={{ cursor: 'pointer' }}>
           <Clock size={32} />
-          <span>Focus Quest</span>
+          <span>Focus Quest {isDemoMode && <small style={{ fontSize: '0.6rem', opacity: 0.5 }}>(Demo)</small>}</span>
         </div>
 
         <button className="btn-new-task-sidebar mb-2" onClick={() => {
@@ -1030,18 +1164,6 @@ export default function Dashboard({ user, onLogout }) {
                     </button>
                   </section>
 
-                  <section className="glass-card">
-                    <div className="card-header">
-                      <h2>スコア履歴</h2>
-                    </div>
-                    <div style={{ height: 150 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={productivityData}>
-                          <Line type="monotone" dataKey="score" stroke="var(--tf-primary)" strokeWidth={3} dot={false} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </section>
                 </div>
               </div>
             </>
@@ -1050,8 +1172,8 @@ export default function Dashboard({ user, onLogout }) {
           {activeTab === 'analysis' && (
             <div className="analysis-view animate-fade-in">
               <div className="analysis-header mb-2">
-                <h1>集中ログサマリー</h1>
-                <p className="text-muted">SNSの使い方を可視化して、勉強時間を取り戻そう。</p>
+                <h1>集中ログ分析</h1>
+                <p className="text-muted">SNSの使い方を可視化して、本来のミッション（勉強）時間を取り戻そう。</p>
               </div>
 
               <div className="analysis-summary-grid mb-2">
@@ -1062,17 +1184,11 @@ export default function Dashboard({ user, onLogout }) {
                     <span className="trend positive"><TrendingUp size={14} /> 4%</span>
                   </div>
                 </div>
-                <div className="summary-stat-card">
+                 <div className="summary-stat-card">
                   <span className="label">潜在ロス (JPY)</span>
                   <div className="value-group">
                     <span className="value">¥{jpyValue.toLocaleString()}</span>
-                    <span className="trend negative"><TrendingDown size={14} /> 12%</span>
-                  </div>
-                </div>
-                <div className="summary-stat-card">
-                  <span className="label">潜在ロス (BTC)</span>
-                  <div className="value-group">
-                    <span className="value">{btcValue.toFixed(6)} BTC</span>
+                    <span className="trend negative"><TrendingDown size={14} /> 損失</span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
@@ -1086,25 +1202,55 @@ export default function Dashboard({ user, onLogout }) {
               <div className="analysis-main-grid">
                 <section className="glass-card chart-section">
                   <div className="card-header">
-                    <h2>24h Bitcoin Asset Erosion (Cumulative)</h2>
+                    <h2>当日の収支推移 (Net Balance)</h2>
                   </div>
                     <div style={{ height: 350, marginTop: '1rem' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={assetLossData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
                         <defs>
-                          <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                          <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset={off} stopColor="var(--tf-accent-lime)" stopOpacity={1} />
+                            <stop offset={off} stopColor="var(--tf-accent-red)" stopOpacity={1} />
+                          </linearGradient>
+                          <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset={off} stopColor="var(--tf-accent-lime)" stopOpacity={0.4}/>
+                            <stop offset={off} stopColor="var(--tf-accent-red)" stopOpacity={0.4}/>
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                         <XAxis dataKey="label" tick={{ fontSize: 10, fontWeight: 700 }} />
-                        <YAxis tick={{ fontSize: 11 }} label={{ value: 'BTC Lost', angle: -90, position: 'insideLeft', offset: 15 }} />
+                        <YAxis tick={{ fontSize: 11 }} label={{ value: 'Net JPY', angle: -90, position: 'insideLeft', offset: 15 }} />
                         <Tooltip
-                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                          formatter={(value) => [`${value.toFixed(8)} BTC`, 'Cumulative Loss']}
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', padding: '12px' }}
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              const item = payload[0]?.payload;
+                              if (!item) return null;
+                              return (
+                                <div style={{ background: 'white', padding: '12px', borderRadius: '12px', border: '1px solid #f0f0f0', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+                                  <div style={{ fontWeight: 800, marginBottom: '8px', borderBottom: '1px solid #f0f0f0', paddingBottom: '4px' }}>{label} の状況</div>
+                                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: (item.netBalance || 0) >= 0 ? 'var(--tf-accent-lime)' : '#ef4444', marginBottom: '8px' }}>
+                                    収支: ¥{item.netBalance?.toLocaleString()}
+                                  </div>
+                                  {item.events && item.events.length > 0 && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      {item.events.map((ev, idx) => (
+                                        <div key={idx} style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                                          <span style={{ color: '#64748b' }}>{ev.name}</span>
+                                          <span style={{ fontWeight: 700, color: ev.type === 'gain' ? 'var(--tf-accent-lime)' : '#ef4444' }}>
+                                            {ev.jpy > 0 ? '+' : ''}{Math.floor(ev.jpy || 0).toLocaleString()}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
                         />
-                        <Area type="monotone" dataKey="cumulativeLossBtc" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorLoss)" animationDuration={1500} />
+                        <Area type="monotone" dataKey="netBalance" stroke="url(#splitColor)" strokeWidth={4} fillOpacity={1} fill="url(#colorBalance)" animationDuration={1500} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -1256,9 +1402,25 @@ export default function Dashboard({ user, onLogout }) {
                   </select>
                 </div>
               </div>
-              <div className="form-group">
-                <label>タグ (カンマ区切り)</label>
-                <input type="text" value={newTodoTags} onChange={(e) => setNewTodoTags(e.target.value)} placeholder="仕事, UI, バグ" disabled={isCreatingTodo} />
+              <div className="form-row">
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label>所要時間見積もり (分)</label>
+                  <input 
+                    type="number" 
+                    value={newTodoEstimate} 
+                    onChange={(e) => setNewTodoEstimate(e.target.value)} 
+                    placeholder="例: 60 (1時間)" 
+                    disabled={isCreatingTodo} 
+                    min="0"
+                  />
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                    ¥{Math.floor((Number(newTodoEstimate || 0) / 60) * 1200).toLocaleString()} 相当の価値
+                  </div>
+                </div>
+                <div className="form-group" style={{ flex: 2 }}>
+                  <label>タグ (カンマ区切り)</label>
+                  <input type="text" value={newTodoTags} onChange={(e) => setNewTodoTags(e.target.value)} placeholder="仕事, UI, バグ" disabled={isCreatingTodo} />
+                </div>
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn-cancel" onClick={() => setIsTaskModalOpen(false)} disabled={isCreatingTodo}>キャンセル</button>
@@ -1530,11 +1692,16 @@ export default function Dashboard({ user, onLogout }) {
             height: 70px;
           }
         }
-        .analysis-view {
-          padding-bottom: 2rem;
+        .analysis-view,
+        .detailed-calendar {
+          padding: 0 1.6rem 2rem;
+        }
+        .analysis-header {
+          margin-top: 1.25rem;
+          margin-bottom: 1.5rem;
         }
         .analysis-header h1 {
-          font-size: 1.75rem;
+          font-size: 1.6rem;
           font-weight: 800;
           color: var(--tf-text);
           margin-bottom: 0.25rem;

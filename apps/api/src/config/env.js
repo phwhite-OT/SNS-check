@@ -22,7 +22,7 @@ const env = {
     SCORE_FIXED_GOAL_PRIMARY: Number(process.env.SCORE_FIXED_GOAL_PRIMARY || 3),
     SCORE_FIXED_GOAL_SECONDARY: Number(process.env.SCORE_FIXED_GOAL_SECONDARY || 5),
     SCORE_PENALTY_PER_SECOND: Number(process.env.SCORE_PENALTY_PER_SECOND || 1),
-    HOURLY_WAGE_JPY: Number(process.env.HOURLY_WAGE_JPY || 3000),
+    HOURLY_WAGE_JPY: Number(process.env.HOURLY_WAGE_JPY || 1200),
     BTC_PRICE_CACHE_MINUTES: Number(process.env.BTC_PRICE_CACHE_MINUTES || 10),
     GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
     GROQ_API_KEY: process.env.GROQ_API_KEY || '',

@@ -123,30 +123,60 @@ async function getDashboard(userId) {
         hourlyBuckets.push({
             timestamp: d.getTime(),
             label: `${d.getHours()}:00`,
-            lossBtc: 0
+            lossJpy: 0,
+            gainJpy: 0,
+            events: []
         });
     }
 
-    // 各セッションをバケットに振り分け
+    const parseEstimate = (desc) => {
+        const match = desc?.match(/\[estimate:(\d+)\]/);
+        return match ? parseInt(match[1], 10) : 0;
+    };
+
+    // SNSセッションをバケットに振り分け & イベント収集
     sessions.forEach(session => {
-        const sessionTime = session.started_at || session.created_at;
-        const startTime = new Date(sessionTime).getTime();
+        const startTime = new Date(session.started_at || session.created_at).getTime();
         const bucket = hourlyBuckets.find(b => startTime >= b.timestamp && startTime < b.timestamp + 3600 * 1000);
         if (bucket) {
-            const duration = Number(session.duration_sec) > 0 ? Number(session.duration_sec) : 120; // 0秒なら2分と仮定
+            const duration = Number(session.duration_sec) > 0 ? Number(session.duration_sec) : 120;
             const jpyLoss = (duration / 3600) * hourlyWageJpy;
-            const btcLoss = btcPrice > 0 ? (jpyLoss / btcPrice) : 0;
-            bucket.lossBtc += btcLoss;
+            bucket.lossJpy += jpyLoss;
+            
+            // 同一ドメインのイベントがあれば加算、なければ新規
+            let ev = bucket.events.find(e => e.type === 'loss' && e.name === session.domain);
+            if (ev) {
+                ev.jpy -= jpyLoss;
+            } else {
+                bucket.events.push({ type: 'loss', name: session.domain, jpy: -jpyLoss });
+            }
         }
     });
 
+    // 完了済みタスクをバケットに振り分け & イベント収集
+    todos.filter(t => t.completed && t.updatedAt).forEach(todo => {
+        const updateTime = new Date(todo.updatedAt).getTime();
+        const bucket = hourlyBuckets.find(b => updateTime >= b.timestamp && updateTime < b.timestamp + 3600 * 1000);
+        if (bucket) {
+            const minutes = parseEstimate(todo.description);
+            const jpyGain = (minutes / 60) * hourlyWageJpy;
+            bucket.gainJpy += jpyGain;
+            bucket.events.push({ type: 'gain', name: `✓ ${todo.title}`, jpy: jpyGain });
+        }
+    });
+
+    const totalRecoveredJpy = todos.filter(t => t.completed).reduce((sum, t) => sum + (parseEstimate(t.description) / 60) * hourlyWageJpy, 0);
+
     // 累積和に変換
     let cumulativeLoss = 0;
+    let currentRecovered = 0;
     const hourlyStats = hourlyBuckets.map(bucket => {
-        cumulativeLoss += bucket.lossBtc;
+        cumulativeLoss += bucket.lossJpy;
+        currentRecovered += bucket.gainJpy;
         return {
             ...bucket,
-            cumulativeLossBtc: Number(cumulativeLoss.toFixed(8))
+            cumulativeLossJpy: Math.floor(cumulativeLoss),
+            netBalance: Math.floor(currentRecovered - cumulativeLoss)
         };
     });
 
