@@ -218,12 +218,12 @@ export default function Dashboard({ user, onLogout }) {
   const handleAnalyzeTask = async (taskOrEvent = null) => {
     // taskOrEvent が Event インスタンスなら null 扱いにする（引数なしの onClick で呼ばれた場合）
     const existingTask = (taskOrEvent && taskOrEvent.nativeEvent) ? null : taskOrEvent;
-    
+
     const title = existingTask ? existingTask.title : newTodoTitle;
     const desc = existingTask ? existingTask.description : newTodoDesc;
 
     if (!title || !title.trim() || isAnalyzing) return;
-    
+
     setIsAnalyzing(true);
     setAiResult(null);
     setAiError(null);
@@ -231,7 +231,7 @@ export default function Dashboard({ user, onLogout }) {
     if (existingTask && existingTask.dueDate) {
       setNewTodoDate(existingTask.dueDate);
     }
-    
+
     try {
       const res = await fetch(`${apiBase}/ai/analyze-task`, {
         method: 'POST',
@@ -245,7 +245,7 @@ export default function Dashboard({ user, onLogout }) {
       const result = await res.json();
       setAiResult(result);
       setSelectedSubtasks(new Set(result.subtasks.map((_, i) => i)));
-      
+
       // もし詳細モーダルから実行したなら、分析結果を表示するために
       // UIの状態を調整する必要があるかもしれない（現状は新規タスクモーダルと同じUIパターンを利用）
     } catch (e) {
@@ -812,7 +812,7 @@ export default function Dashboard({ user, onLogout }) {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
                                   {hasChildren && (
-                                    <button 
+                                    <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setExpandedSubtasks(prev => {
@@ -847,7 +847,7 @@ export default function Dashboard({ user, onLogout }) {
                               </div>
                               <div className="flex gap-2 items-center">
                                 {!todo.completed && (
-                                  <button 
+                                  <button
                                     onClick={(e) => { e.stopPropagation(); handleAnalyzeTask(todo); setIsTaskModalOpen(true); }}
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: '#7c3aed' }}
                                     title="AIでタスク分析"
@@ -1257,13 +1257,13 @@ export default function Dashboard({ user, onLogout }) {
                   <div className="card-header">
                     <h2>24h Bitcoin Asset Erosion (Cumulative)</h2>
                   </div>
-                    <div style={{ height: 350, marginTop: '1rem' }}>
+                  <div style={{ height: 350, marginTop: '1rem' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={assetLossData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
                         <defs>
                           <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.1} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -1574,7 +1574,7 @@ export default function Dashboard({ user, onLogout }) {
                     setIsDetailModalOpen(false);
                   }}
                 >
-                   {togglingTodoMap[viewingTask.id]
+                  {togglingTodoMap[viewingTask.id]
                     ? '更新中...'
                     : (viewingTask.completed ? '未完了に戻す' : '完了にする')}
                 </button>
