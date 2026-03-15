@@ -1,9 +1,0 @@
-name = "sns-check-web"
-main = ".open-next/worker.js"
-compatibility_date = "2026-03-15"
-compatibility_flags = ["nodejs_compat"]
-workers_dev = true
-
-[assets]
-directory = ".open-next/assets"
-binding = "ASSETS"

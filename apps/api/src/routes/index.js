@@ -12,6 +12,7 @@ const {
     updateTodo,
     deleteTodo,
 } = require('../controllers/todosController');
+
 const {
     getBlacklist,
     createBlacklist,
@@ -24,8 +25,10 @@ const {
     deleteCalendarEvent,
 } = require('../controllers/calendarEventsController');
 const { postTime } = require('../controllers/timeController');
+const { postHistory } = require('../controllers/historyController');
 const { getDashboard } = require('../controllers/dashboardController');
 const { getFocusMode, setFocusMode } = require('../controllers/focusModeController');
+const { postAnalyzeTask } = require('../controllers/aiController');
 const authRouter = require('./auth');
 
 const router = express.Router();
@@ -72,6 +75,9 @@ router.delete('/calendar-events/:id', asyncHandler(deleteCalendarEvent));
 // 時間計測データの受信とダッシュボード情報の取得
 router.post('/time', asyncHandler(postTime));
 
+// 過去の閲覧履歴の受信
+router.post('/history', asyncHandler(postHistory));
+
 // ダッシュボード情報の取得
 router.get('/dashboard', asyncHandler(getDashboard));
 
@@ -81,4 +87,6 @@ router.get('/focus-mode', asyncHandler(getFocusMode));
 // 集中モード状態の更新
 router.post('/focus-mode', asyncHandler(setFocusMode));
 
+// AIによるタスク分析
+router.post('/ai/analyze-task', asyncHandler(postAnalyzeTask));
 module.exports = { apiRouter: router };

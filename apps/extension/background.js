@@ -2,7 +2,7 @@
 const API_BASE = 'http://localhost:3001/api';
 const API_ENDPOINT = `${API_BASE}/time`;
 // TODO: Supabaseの profiles.id（実在UUID）に置き換えてください。
-const X_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+const X_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
 
 // API取得不可でも最低限ロックできるフォールバック
 const FALLBACK_TARGET_SITES = {
@@ -227,10 +227,11 @@ function saveTime(site, seconds) {
 }
 
 // ⏰ --- 定期的にバックエンド（API）にデータを送信・取得する設定 ---
-// 「5秒ごと」に同期、「1分ごと」にブラックリスト更新
+// 「5秒ごと」に同期、「1分ごと」にブラックリスト更新、 「30分ごと」に履歴同期
 chrome.alarms.create('syncTime', { periodInMinutes: 1 / 12 });
 chrome.alarms.create('fetchBlacklist', { periodInMinutes: 1 });
 chrome.alarms.create('syncFocusMode', { periodInMinutes: 1 / 12 });
+chrome.alarms.create('syncHistory', { periodInMinutes: 30 });
 
 // アラームが鳴った時の処理
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -240,9 +241,38 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         fetchBlacklist();
     } else if (alarm.name === 'syncFocusMode') {
         syncFocusModeFromApi();
+    } else if (alarm.name === 'syncHistory') {
+        syncHistory();
     }
 });
 
+// ポップアップからのメッセージを待機
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'syncHistory') {
+        syncHistory().then(() => {
+            sendResponse({ success: true });
+        }).catch(err => {
+            console.error('Manual sync failed:', err);
+            sendResponse({ success: false, error: err.message });
+        });
+        return true;
+    }
+});
+
+// 初期起動時にも履歴を同期
+syncHistory();
+
+// � --- ロック閾値チェック関数 ---
+// syncToApi（5秒ごと）から呼ばれ、累積時間が閾値を超えたらロック画面へ遷移する
+function checkLockThreshold() {
+    if (!activeSite || !startTime || activeTabId === null) return;
+    if (lockedTabs.has(activeTabId)) return;
+
+    const total = tabAccumulatedSeconds[activeTabId] || 0;
+    if (total >= LOCK_THRESHOLD_SECONDS) {
+        triggerLockScreen(activeTabId, activeSite);
+    }
+}
 // 🔒 --- ロック画面を表示する関数 ---
 function triggerLockScreen(tabId, siteName) {
     // 二重安全策: OFFならロックしない
@@ -301,4 +331,58 @@ function syncToApi() {
             }
         });
     });
+}
+
+// 📚 --- ブラウザの閲覧履歴を同期する関数 ---
+async function syncHistory() {
+    console.log('--- syncHistory start ---');
+    try {
+        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+        console.log('Searching history since:', new Date(oneDayAgo).toISOString());
+        
+        return new Promise((resolve, reject) => {
+            chrome.history.search({
+                text: '',
+                startTime: oneDayAgo,
+                maxResults: 5000 // より多くのデータを取得
+            }, (historyItems) => {
+                if (chrome.runtime.lastError) {
+                    console.error('History search error:', chrome.runtime.lastError);
+                    return reject(chrome.runtime.lastError);
+                }
+                
+                console.log(`Found ${historyItems ? historyItems.length : 0} history items.`);
+                
+                if (historyItems && historyItems.length > 0) {
+                    fetch(`${API_BASE}/history`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-user-id': X_USER_ID,
+                        },
+                        body: JSON.stringify({ history: historyItems })
+                    })
+                    .then(res => {
+                        console.log('Sync history API response status:', res.status);
+                        if (res.ok) {
+                            console.log('History synced successfully');
+                            resolve();
+                        } else {
+                            reject(new Error(`API Error: ${res.status}`));
+                        }
+                    })
+                    .catch(err => {
+                        console.error('History sync fetch failed:', err);
+                        reject(err);
+                    });
+                } else {
+                    console.log('No history items found to sync.');
+                    resolve();
+                }
+            });
+        });
+    } catch (e) {
+        console.error('Critical error in syncHistory:', e);
+        throw e;
+    }
 }

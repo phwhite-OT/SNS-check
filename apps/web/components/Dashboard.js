@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area
 } from 'recharts';
 import {
   Calendar as CalendarIcon,
@@ -36,9 +36,13 @@ import { ja } from 'date-fns/locale';
 
 const API_BASE = (
   process.env.NEXT_PUBLIC_API_BASE ||
-  `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/$/, '')}/api`
+  (process.env.NEXT_PUBLIC_API_URL
+    ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`
+    : '/api')
 ).replace(/\/$/, '');
 const FOCUS_MODE_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+
+const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
 
 export default function Dashboard({ user, onLogout }) {
   const [data, setData] = useState(null);
@@ -72,6 +76,14 @@ export default function Dashboard({ user, onLogout }) {
   const latestFetchRequestIdRef = useRef(0);
   const togglingTodoSetRef = useRef(new Set());
 
+  // AI analysis states
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiResult, setAiResult] = useState(null); // { subtasks, complexity, totalEstimatedHours, tips }
+  const [aiError, setAiError] = useState(null);
+  const [selectedSubtasks, setSelectedSubtasks] = useState(new Set());
+  const [expandedSubtasks, setExpandedSubtasks] = useState(new Set()); // 親タスクIDのセット
+  const [analyzingTodoId, setAnalyzingTodoId] = useState(null); // 現在分析中の既存タスクID
+
   // Task detail states
   const [viewingTask, setViewingTask] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -82,7 +94,7 @@ export default function Dashboard({ user, onLogout }) {
     try {
       const res = await fetch(`${API_BASE}/dashboard`, {
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
       if (!res.ok) throw new Error('API request failed');
@@ -125,7 +137,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos`, {
         method: 'POST',
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -151,6 +163,108 @@ export default function Dashboard({ user, onLogout }) {
       fetchData();
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsCreatingTodo(false);
+    }
+  };
+
+  // AIタスク分析ハンドラー
+  const handleAnalyzeTask = async (taskOrEvent = null) => {
+    // taskOrEvent が Event インスタンスなら null 扱いにする（引数なしの onClick で呼ばれた場合）
+    const existingTask = (taskOrEvent && taskOrEvent.nativeEvent) ? null : taskOrEvent;
+    
+    const title = existingTask ? existingTask.title : newTodoTitle;
+    const desc = existingTask ? existingTask.description : newTodoDesc;
+
+    if (!title || !title.trim() || isAnalyzing) return;
+    
+    setIsAnalyzing(true);
+    setAiResult(null);
+    setAiError(null);
+    setAnalyzingTodoId(existingTask ? existingTask.id : null);
+    
+    try {
+      const res = await fetch(`${API_BASE}/ai/analyze-task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description: desc }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(res.status === 429 ? 'AIのリクエスト制限に達しました。1〜2分後に再試行してください。' : (errData.error || 'AI分析に失敗しました'));
+      }
+      const result = await res.json();
+      setAiResult(result);
+      setSelectedSubtasks(new Set(result.subtasks.map((_, i) => i)));
+      
+      // もし詳細モーダルから実行したなら、分析結果を表示するために
+      // UIの状態を調整する必要があるかもしれない（現状は新規タスクモーダルと同じUIパターンを利用）
+    } catch (e) {
+      console.error('AI Error:', e);
+      setAiError(e.message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // AIが提案したサブタスクをTodoとして一括保存
+  const handleSaveSubtasks = async () => {
+    if (!aiResult || selectedSubtasks.size === 0 || isCreatingTodo) return;
+    const toSave = aiResult.subtasks.filter((_, i) => selectedSubtasks.has(i));
+    setIsCreatingTodo(true);
+    try {
+      let parentId = analyzingTodoId;
+
+      // 既存タスクの分析でない場合は、まず親となるメインタスクを作成
+      if (!parentId) {
+        const parentResponse = await fetch(`${API_BASE}/todos`, {
+          method: 'POST',
+          headers: {
+            'x-user-id': user?.id || DEFAULT_USER_ID,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: newTodoTitle,
+            description: newTodoDesc || '[AI分析から生成された親タスク]',
+            priority: newTodoPriority,
+            dueDate: selectedDate,
+          }),
+        });
+
+        if (!parentResponse.ok) throw new Error('親タスクの作成に失敗しました');
+        const parentTask = await parentResponse.json();
+        parentId = parentTask.id;
+      }
+
+      // 2. 選択されたサブタスクを親子紐付け情報を付けて保存
+      for (const subtask of toSave) {
+        console.log('Adding subtask:', subtask);
+        const response = await fetch(`${API_BASE}/todos`, {
+          method: 'POST',
+          headers: { 'x-user-id': user?.id || DEFAULT_USER_ID, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: subtask.title,
+            // [parent:ID] プレフィックスを付けることで親子関係を表現
+            description: `[parent:${parentId}] [AI生成] 予想: ${subtask.estimatedHours}h / 優先度: ${subtask.priority}`,
+            priority: subtask.priority,
+            dueDate: selectedDate,
+          }),
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          console.error(`Failed to add subtask "${subtask.title}":`, response.status, text);
+        }
+      }
+      setAiResult(null);
+      setAnalyzingTodoId(null);
+      setIsTaskModalOpen(false);
+      setIsDetailModalOpen(false); // 詳細モーダルからだった場合も閉じる
+      setNewTodoTitle('');
+      setNewTodoDesc('');
+      fetchData();
+    } catch (e) {
+      console.error('Error in handleSaveSubtasks:', e);
+      setAiError(e.message);
     } finally {
       setIsCreatingTodo(false);
     }
@@ -185,7 +299,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'PUT',
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ completed: nextCompleted })
@@ -233,7 +347,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'DELETE',
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
 
@@ -256,7 +370,7 @@ export default function Dashboard({ user, onLogout }) {
       await fetch(`${API_BASE}/blacklist/${domain}`, {
         method: 'DELETE',
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
       fetchData();
@@ -314,6 +428,11 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
+  const goToDashboardByDate = (dateStr) => {
+    setSelectedDate(dateStr);
+    setActiveTab('dashboard');
+  };
+
   // Calendar Helpers
   const daysInMonth = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentMonth));
@@ -327,11 +446,41 @@ export default function Dashboard({ user, onLogout }) {
     return data.todos.filter(t => t.dueDate === dateStr);
   };
 
+  // mini-calendar で選択した日付のタスクのみを表示し、未完了と優先度を上位に並べる
+  const filteredTodos = (data?.todos || [])
+    .filter((todo) => todo.dueDate === selectedDate);
+
+  // 親子関係を解析してグループ化
+  const groupedTasks = useMemo(() => {
+    const parents = [];
+    const childrenMap = {};
+
+    filteredTodos.forEach(todo => {
+      const match = todo.description?.match(/\[parent:([^\]]+)\]/);
+      if (match) {
+        const parentId = match[1];
+        if (!childrenMap[parentId]) childrenMap[parentId] = [];
+        childrenMap[parentId].push(todo);
+      } else {
+        parents.push(todo);
+      }
+    });
+
+    // 親タスクをソート
+    parents.sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      const priorityRank = { high: 0, medium: 1, low: 2 };
+      return (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3);
+    });
+
+    return { parents, childrenMap };
+  }, [filteredTodos]);
+
   if (isLoading) return <div className="loading">読み込み中...</div>;
   if (error) return <div className="error-card">{error}</div>;
   if (!data) return null;
 
-  const chartData = data.history.map(item => ({
+  const productivityData = (data?.history || []).map(item => ({
     time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     score: item.score
   }));
@@ -351,16 +500,34 @@ export default function Dashboard({ user, onLogout }) {
     return { label: format(target, 'M/d'), className: 'upcoming' };
   };
 
-  // 全てのタスクを表示。未完了を優先し、期限日でソート
-  const filteredTodos = [...data.todos].sort((a, b) => {
-    if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    if (!a.dueDate && !b.dueDate) return 0;
-    if (!a.dueDate) return 1;
-    if (!b.dueDate) return -1;
-    return new Date(a.dueDate) - new Date(b.dueDate);
-  });
-  const remainingTodosCount = data.todos.filter(t => !t.completed).length;
-  const completedPercentage = data.todos.length > 0 ? Math.round((data.todos.filter(t => t.completed).length / data.todos.length) * 100) : 0;
+
+  const selectedDateRemainingCount = (data?.todos || []).filter((todo) => todo.dueDate === selectedDate && !todo.completed).length;
+  const remainingTodosCount = (data?.todos || []).filter(t => !t.completed).length;
+
+  const missionProgress = data?.missionProgress || {};
+  const goalTargets = Array.isArray(missionProgress.goals) && missionProgress.goals.length > 0
+    ? missionProgress.goals
+    : [3, 5];
+  const primaryGoal = goalTargets[0] || 3;
+  const secondaryGoal = goalTargets[1] || 5;
+
+  const fallbackCompletedLifetime = (data?.todos || []).filter((todo) => todo.completed).length;
+  const completedLifetime = Number.isFinite(missionProgress.completedLifetime)
+    ? missionProgress.completedLifetime
+    : fallbackCompletedLifetime;
+  const createdLifetime = Number.isFinite(missionProgress.createdLifetime)
+    ? missionProgress.createdLifetime
+    : Math.max((data?.todos || []).length, completedLifetime);
+
+  const activeTarget = Number.isFinite(missionProgress.activeTarget)
+    ? missionProgress.activeTarget
+    : (completedLifetime < primaryGoal ? primaryGoal : secondaryGoal);
+  const activeProgress = Number.isFinite(missionProgress.activeProgress)
+    ? missionProgress.activeProgress
+    : Math.min(100, Math.round((completedLifetime / Math.max(activeTarget, 1)) * 100));
+
+  const primaryGoalAchieved = completedLifetime >= primaryGoal;
+  const secondaryGoalAchieved = completedLifetime >= secondaryGoal;
 
   // Analysis Page Data
   const siteBreakdown = data?.siteBreakdown || [];
@@ -374,10 +541,7 @@ export default function Dashboard({ user, onLogout }) {
     return h > 0 ? `${h}時間 ${m}分` : `${m}分`;
   };
 
-  const barChartData = sortedBreakdown.slice(0, 7).map(site => ({
-    name: site.domain,
-    minutes: site.timeSpent
-  }));
+  const assetLossData = data?.hourlyStats || [];
 
   const btcValue = typeof data?.assets?.btc === 'number' ? data.assets.btc : Number(data?.assets?.btc || 0);
   const jpyValue = data?.assets?.jpy || 0;
@@ -462,63 +626,120 @@ export default function Dashboard({ user, onLogout }) {
                         <div className="task-card-icon">
                           <FileText size={18} />
                         </div>
-                        <h2>ミッション一覧</h2>
+                        <h2>{format(new Date(`${selectedDate}T00:00:00`), 'M月 d日', { locale: ja })} のミッション</h2>
                       </div>
-                      <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{format(new Date(selectedDate), 'yyyy年 M月 d日', { locale: ja })}</span>
+                      <div className="mission-head-right">
+                        <span className="mission-count-pill">残り {selectedDateRemainingCount} 件</span>
+                        <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                          {format(new Date(`${selectedDate}T00:00:00`), 'yyyy年 M月 d日 (E)', { locale: ja })}
+                        </span>
+                      </div>
                     </div>
 
                     <ul className="todo-list">
-                      {filteredTodos.map(todo => (
-                        <li key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
-                          <div
-                            className="checkbox-custom"
-                            onClick={() => !togglingTodoMap[todo.id] && handleToggleTodo(todo.id, todo.completed)}
-                            style={{ opacity: togglingTodoMap[todo.id] ? 0.7 : 1, pointerEvents: togglingTodoMap[todo.id] ? 'none' : 'auto' }}
-                          >
-                            {togglingTodoMap[todo.id] ? (
-                              <LoaderCircle size={16} />
-                            ) : (
-                              todo.completed && <CheckCircle size={18} color="white" fill="white" />
+                      {groupedTasks.parents.map((todo) => {
+                        const children = groupedTasks.childrenMap[todo.id] || [];
+                        const isExpanded = expandedSubtasks.has(todo.id);
+                        const hasChildren = children.length > 0;
+
+                        return (
+                          <div key={todo.id}>
+                            <li className={`todo-item ${todo.completed ? 'completed' : ''}`}>
+                              <div
+                                className="checkbox-custom"
+                                onClick={() => handleToggleTodo(todo.id, todo.completed)}
+                              >
+                                {todo.completed && <CheckCircle size={18} color="white" fill="white" />}
+                              </div>
+                              <div
+                                className="todo-content-wrapper"
+                                style={{ flex: 1, cursor: 'pointer' }}
+                                onClick={() => {
+                                  setViewingTask(todo);
+                                  setIsDetailModalOpen(true);
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
+                                  {hasChildren && (
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedSubtasks(prev => {
+                                          const next = new Set(prev);
+                                          next.has(todo.id) ? next.delete(todo.id) : next.add(todo.id);
+                                          return next;
+                                        });
+                                      }}
+                                      style={{ background: 'rgba(124, 58, 237, 0.1)', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.7rem', color: '#7c3aed', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    >
+                                      {isExpanded ? '▲ 閉じる' : `▼ サブタスク(${children.length})`}
+                                    </button>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '0.25rem' }}>
+                                  {todo.tags?.map(tag => <span key={tag} className="tag" style={{ textTransform: 'uppercase' }}>{tag}</span>)}
+                                  <span className={`priority-tag ${todo.priority}`} style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#f1f5f9', fontWeight: 700 }}>{todo.priority.toUpperCase()}</span>
+                                  {todo.dueDate && (() => {
+                                    const rel = getRelativeDateLabel(todo.dueDate);
+                                    return (
+                                      <span className={`date-badge ${rel?.className}`}>
+                                        <Clock size={12} /> {rel?.label}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                                {todo.description && (
+                                  <div className="todo-description text-muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                                    {todo.description.replace(/\[parent:[^\]]+\]\s*/, '')}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-2 items-center">
+                                {!todo.completed && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleAnalyzeTask(todo); setIsTaskModalOpen(true); }}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: '#7c3aed' }}
+                                    title="AIでタスク分析"
+                                  >
+                                    ✨
+                                  </button>
+                                )}
+                                <Trash2 size={18} className="text-muted cursor-pointer hover:text-red-500" onClick={() => handleDeleteTodo(todo.id)} />
+                                <MoreVertical size={18} className="text-muted cursor-pointer" />
+                              </div>
+                            </li>
+
+                            {/* サブタスクの表示 */}
+                            {hasChildren && isExpanded && (
+                              <div style={{ marginLeft: '2.5rem', borderLeft: '2px dashed #e2e8f0', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', marginBottom: '1rem' }}>
+                                {children.map(child => (
+                                  <li key={child.id} className={`todo-item subtask ${child.completed ? 'completed' : ''}`} style={{ padding: '0.75rem', fontSize: '0.9rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div className="checkbox-custom" onClick={() => handleToggleTodo(child.id, child.completed)}>
+                                      {child.completed && <CheckCircle size={16} color="white" fill="white" />}
+                                    </div>
+                                    <div className="todo-content-wrapper" style={{ flex: 1 }} onClick={() => { setViewingTask(child); setIsDetailModalOpen(true); }}>
+                                      <span className="todo-text" style={{ fontSize: '0.9rem', fontWeight: 600 }}>{child.title}</span>
+                                      {child.description && <p className="text-muted" style={{ fontSize: '0.75rem' }}>{child.description.replace(/\[parent:[^\]]+\]\s*/, '')}</p>}
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                      <Trash2 size={16} className="text-muted cursor-pointer hover:text-red-500" onClick={() => handleDeleteTodo(child.id)} />
+                                    </div>
+                                  </li>
+                                ))}
+                              </div>
                             )}
                           </div>
-                          <div
-                            className="todo-content-wrapper"
-                            style={{ flex: 1, cursor: 'pointer' }}
-                            onClick={() => {
-                              setViewingTask(todo);
-                              setIsDetailModalOpen(true);
-                            }}
-                          >
-                            <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
-                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                              {todo.tags?.map(tag => <span key={tag} className="tag" style={{ textTransform: 'uppercase' }}>{tag}</span>)}
-                              {todo.dueDate && (() => {
-                                const rel = getRelativeDateLabel(todo.dueDate);
-                                return (
-                                  <span className={`date-badge ${rel.className}`}>
-                                    <Clock size={12} /> {rel.label}
-                                  </span>
-                                );
-                              })()}
-                            </div>
-                            {todo.description && <div className="todo-description text-muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{todo.description}</div>}
-                          </div>
-                          <div className="flex gap-2 items-center">
-                            {deletingTodoId === todo.id ? (
-                              <span className="status-inline">
-                                <LoaderCircle size={16} /> 削除中...
-                              </span>
-                            ) : (
-                              <Trash2 size={18} className="text-muted cursor-pointer hover:text-red-500" onClick={() => handleDeleteTodo(todo.id)} />
-                            )}
-                            <MoreVertical size={18} className="text-muted cursor-pointer" />
-                          </div>
+                        );
+                      })}
+                      {groupedTasks.parents.length === 0 && (
+                        <li className="mission-empty-state">
+                          この日はまだミッションがありません。右のカレンダーで別日を選ぶか、この日に新規タスクを追加しましょう。
                         </li>
-                      ))}
-                      {filteredTodos.length === 0 && <li className="text-muted text-center py-4">この日のタスクはありません。</li>}
+                      )}
                       <div className="mt-2 text-center">
-                        <button className="add-task-inline" onClick={() => setIsTaskModalOpen(true)}>
-                          <Plus size={16} /> タスクを追加
+                        <button className="add-task-inline" onClick={() => setIsTaskModalOpen(true)} style={{ background: 'none', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '8px', color: '#64748b', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                          <Plus size={16} /> この日にタスクを追加
                         </button>
                       </div>
                     </ul>
@@ -569,12 +790,19 @@ export default function Dashboard({ user, onLogout }) {
                   <section className="score-summary-card">
                     <div className="score-summary-head">
                       <Target size={20} />
-                      <h2>今週の達成ゲージ</h2>
+                      <h2>固定目標チャレンジ</h2>
+                    </div>
+                    <div className="score-goal-chip-wrap">
+                      <span className={`goal-chip ${primaryGoalAchieved ? 'done' : ''}`}>{primaryGoal}件クリア</span>
+                      <span className={`goal-chip ${secondaryGoalAchieved ? 'done' : ''}`}>{secondaryGoal}件クリア</span>
                     </div>
                     <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: `${completedPercentage}%` }}></div>
+                      <div className="progress-fill" style={{ width: `${activeProgress}%` }}></div>
                     </div>
-                    <p>進捗は {completedPercentage}%。未完了の {remainingTodosCount} 件を順番に片付けて連勝を作ろう。</p>
+                    <p>
+                      次の目標は {activeTarget} 件クリア。進捗は {activeProgress}%。
+                      累計クリア {completedLifetime} 件 / 累計作成 {createdLifetime} 件で行動を評価します。
+                    </p>
                   </section>
 
                   <section className="glass-card" style={{ marginTop: '0.75rem', marginBottom: '0.75rem' }}>
@@ -636,7 +864,7 @@ export default function Dashboard({ user, onLogout }) {
                     </div>
                     <div style={{ height: 150 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
+                        <LineChart data={productivityData}>
                           <Line type="monotone" dataKey="score" stroke="var(--tf-primary)" strokeWidth={3} dot={false} />
                         </LineChart>
                       </ResponsiveContainer>
@@ -686,24 +914,26 @@ export default function Dashboard({ user, onLogout }) {
               <div className="analysis-main-grid">
                 <section className="glass-card chart-section">
                   <div className="card-header">
-                    <h2>ドメイン別の滞在時間</h2>
+                    <h2>24h Bitcoin Asset Erosion (Cumulative)</h2>
                   </div>
-                  <div style={{ height: 350, marginTop: '1rem' }}>
+                    <div style={{ height: 350, marginTop: '1rem' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={barChartData} layout="vertical" margin={{ left: 20, right: 30 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(148, 163, 184, 0.32)" />
-                        <XAxis type="number" hide />
-                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                      <AreaChart data={assetLossData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+                        <defs>
+                          <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fontWeight: 700 }} />
+                        <YAxis tick={{ fontSize: 11 }} label={{ value: 'BTC Lost', angle: -90, position: 'insideLeft', offset: 15 }} />
                         <Tooltip
                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                          formatter={(value) => [`${value} 分`, '滞在時間']}
+                          formatter={(value) => [`${value.toFixed(8)} BTC`, 'Cumulative Loss']}
                         />
-                        <Bar dataKey="minutes" radius={[0, 4, 4, 0]} barSize={24}>
-                          {barChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={index === 0 ? '#0f766e' : '#9ecfc6'} />
-                          ))}
-                        </Bar>
-                      </BarChart>
+                        <Area type="monotone" dataKey="cumulativeLossBtc" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorLoss)" animationDuration={1500} />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </section>
@@ -767,14 +997,29 @@ export default function Dashboard({ user, onLogout }) {
                   <ChevronRight className="cursor-pointer" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} />
                 </div>
               </div>
+              <p className="detailed-calendar-tip">日付セルをクリックすると、その日のミッション一覧へ移動します。</p>
               <div className="full-calendar-grid">
                 {['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'].map(d => (
                   <div key={d} className="calendar-day-label full-calendar-day-label">{d}</div>
                 ))}
                 {daysInMonth.map((day, idx) => {
+                  const dateStr = format(day, 'yyyy-MM-dd');
                   const dayTodos = todosOnDay(day);
+                  const isSelected = selectedDate === dateStr;
                   return (
-                    <div key={idx} className={`full-calendar-cell ${!isSameMonth(day, currentMonth) ? 'bg-slate-50 opacity-40' : ''}`} onClick={() => { setSelectedDate(format(day, 'yyyy-MM-dd')); }}>
+                    <div
+                      key={idx}
+                      className={`full-calendar-cell ${isSelected ? 'is-selected' : ''} ${!isSameMonth(day, currentMonth) ? 'bg-slate-50 opacity-40' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => goToDashboardByDate(dateStr)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          goToDashboardByDate(dateStr);
+                        }
+                      }}
+                    >
                       <div className="full-calendar-day-num">{format(day, 'd')}</div>
                       <div className="full-calendar-tasks">
                         {dayTodos.slice(0, 3).map(todo => (
@@ -845,10 +1090,82 @@ export default function Dashboard({ user, onLogout }) {
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn-cancel" onClick={() => setIsTaskModalOpen(false)} disabled={isCreatingTodo}>キャンセル</button>
+                <button
+                  type="button"
+                  onClick={handleAnalyzeTask}
+                  disabled={isAnalyzing || !newTodoTitle.trim() || isCreatingTodo}
+                  style={{
+                    background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0 1rem',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    opacity: isAnalyzing || !newTodoTitle.trim() ? 0.6 : 1,
+                  }}
+                >
+                  {isAnalyzing ? '✨ 分析中...' : '✨ AIで分析'}
+                </button>
                 <button type="submit" className="btn-submit" disabled={isCreatingTodo}>
                   {isCreatingTodo ? '保存中...' : '作成'}
                 </button>
               </div>
+
+              {/* AIエラー表示 */}
+              {aiError && (
+                <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: '0.85rem', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  ⚠️ {aiError}
+                </div>
+              )}
+
+              {/* AI分析結果の表示 */}
+              {aiResult && (
+                <div style={{ marginTop: '1rem', background: 'rgba(109,40,217,0.07)', border: '1px solid rgba(109,40,217,0.25)', borderRadius: '12px', padding: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#7c3aed' }}>✨ AIが提案するサブタスク</span>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                      複雑度: {aiResult.complexity} / 合計 {aiResult.totalEstimatedHours}h
+                    </span>
+                  </div>
+                  {aiResult.tips && (
+                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem', fontStyle: 'italic' }}>
+                      💡 {aiResult.tips}
+                    </div>
+                  )}
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {aiResult.subtasks.map((st, i) => (
+                      <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: 'white', borderRadius: '8px', border: '1px solid rgba(109,40,217,0.15)', cursor: 'pointer' }}
+                        onClick={() => setSelectedSubtasks(prev => {
+                          const next = new Set(prev);
+                          next.has(i) ? next.delete(i) : next.add(i);
+                          return next;
+                        })}
+                      >
+                        <span style={{ width: '18px', height: '18px', borderRadius: '4px', border: '2px solid #7c3aed', background: selectedSubtasks.has(i) ? '#7c3aed' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {selectedSubtasks.has(i) && <span style={{ color: 'white', fontSize: '12px' }}>✓</span>}
+                        </span>
+                        <span style={{ flex: 1, fontWeight: 600, fontSize: '0.88rem' }}>{st.title}</span>
+                        <span style={{ fontSize: '0.75rem', color: st.priority === 'high' ? '#ef4444' : st.priority === 'medium' ? '#f59e0b' : '#94a3b8', fontWeight: 700 }}>
+                          {st.priority === 'high' ? '高' : st.priority === 'medium' ? '中' : '低'}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{st.estimatedHours}h</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={handleSaveSubtasks}
+                    disabled={selectedSubtasks.size === 0 || isCreatingTodo}
+                    style={{ marginTop: '0.75rem', width: '100%', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', padding: '0.6rem', fontWeight: 700, cursor: 'pointer', opacity: selectedSubtasks.size === 0 ? 0.5 : 1 }}
+                  >
+                    {isCreatingTodo ? '保存中...' : `選択した ${selectedSubtasks.size} 件をTodoに追加`}
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>
@@ -916,10 +1233,23 @@ export default function Dashboard({ user, onLogout }) {
                     setIsDetailModalOpen(false);
                   }}
                 >
-                  {togglingTodoMap[viewingTask.id]
+                   {togglingTodoMap[viewingTask.id]
                     ? '更新中...'
                     : (viewingTask.completed ? '未完了に戻す' : '完了にする')}
                 </button>
+                {!viewingTask.completed && (
+                  <button
+                    className="btn-submit"
+                    style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', opacity: isAnalyzing ? 0.7 : 1 }}
+                    disabled={isAnalyzing}
+                    onClick={() => {
+                      handleAnalyzeTask(viewingTask);
+                      setIsTaskModalOpen(true);
+                    }}
+                  >
+                    {isAnalyzing ? '✨ 分析中...' : '✨ AIで分析'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

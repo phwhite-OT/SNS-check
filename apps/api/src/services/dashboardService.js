@@ -8,7 +8,34 @@ const { env } = require('../config/env');
 const todosService = require('./todosService');
 const blacklistService = require('./blacklistService');
 const tabSessionsRepository = require('../repositories/tabSessionsRepository');
+const profilesRepository = require('../repositories/profilesRepository');
 const { buildAssetMetrics } = require('./assetValuationService');
+
+function toSafeGoal(value, fallback) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.floor(parsed);
+}
+
+function resolveGoalTargets() {
+    const primary = toSafeGoal(env.SCORE_FIXED_GOAL_PRIMARY, 3);
+    const secondary = toSafeGoal(env.SCORE_FIXED_GOAL_SECONDARY, 5);
+    const sorted = [primary, secondary].sort((a, b) => a - b);
+
+    if (sorted[0] === sorted[1]) {
+        return [sorted[0], sorted[0] + 2];
+    }
+    return sorted;
+}
+
+function buildGoalState(completedLifetime, target) {
+    const progress = Math.min(100, Math.round((completedLifetime / Math.max(target, 1)) * 100));
+    return {
+        target,
+        progress,
+        achieved: completedLifetime >= target,
+    };
+}
 
 // ダッシュボード表示に必要なデータをまとめて取得する関数
 async function getDashboard(userId) {
@@ -25,13 +52,42 @@ async function getDashboard(userId) {
         return acc;
     }, {});
 
-    const totalTimeSeconds = Object.values(timeData).reduce((sum, sec) => sum + sec, 0);
-    const doneCount = todos.filter((todo) => todo.completed).length;
+    const visitCounts = sessions.reduce((acc, row) => {
+        const key = row.domain;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {});
 
-    const score =
+    const totalTimeSeconds = Object.values(timeData).reduce((sum, sec) => sum + sec, 0);
+    const currentCreatedCount = todos.length;
+    const currentCompletedCount = todos.filter((todo) => todo.completed).length;
+
+    const todoProgress = await profilesRepository.getTodoProgressStats(userId, {
+        minimumCreated: currentCreatedCount,
+        minimumCompleted: currentCompletedCount,
+    });
+
+    const completedLifetime = todoProgress.completedCount;
+    const createdLifetime = Math.max(todoProgress.createdCount, completedLifetime);
+
+    const [goalPrimary, goalSecondary] = resolveGoalTargets();
+    const activeTarget = completedLifetime < goalPrimary ? goalPrimary : goalSecondary;
+    const activeProgress = Math.min(100, Math.round((completedLifetime / Math.max(activeTarget, 1)) * 100));
+
+    const fixedGoalBonusMultiplier = completedLifetime >= goalSecondary
+        ? 2
+        : completedLifetime >= goalPrimary
+            ? 1
+            : 0;
+
+    const scoreRaw =
         env.DEFAULT_SCORE_BASE +
-        doneCount * env.SCORE_RECOVERY_PER_DONE_TODO -
+        completedLifetime * env.SCORE_RECOVERY_PER_DONE_TODO +
+        createdLifetime * env.SCORE_BONUS_PER_CREATED_TODO +
+        fixedGoalBonusMultiplier * env.SCORE_RECOVERY_PER_DONE_TODO -
         totalTimeSeconds * env.SCORE_PENALTY_PER_SECOND;
+
+    const score = Math.max(0, Math.round(scoreRaw));
 
     let assets;
     try {
@@ -50,16 +106,70 @@ async function getDashboard(userId) {
 
     const siteBreakdown = Object.entries(timeData).map(([domain, seconds]) => ({
         domain,
-        timeSpent: Math.floor(seconds / 60)
+        timeSpent: Math.floor(seconds / 60),
+        visits: visitCounts[domain] || 0
     }));
+
+    // --- 過去24時間の時間別累積損失（BTC）の計算 ---
+    const btcPrice = assets.btcPriceJpy || 10000000;
+    const hourlyWageJpy = env.HOURLY_WAGE_JPY;
+    
+    // 24時間分のバケットを用意
+    const now = new Date();
+    const hourlyBuckets = [];
+    for (let i = 23; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 3600 * 1000);
+        d.setMinutes(0, 0, 0);
+        hourlyBuckets.push({
+            timestamp: d.getTime(),
+            label: `${d.getHours()}:00`,
+            lossBtc: 0
+        });
+    }
+
+    // 各セッションをバケットに振り分け
+    sessions.forEach(session => {
+        const sessionTime = session.started_at || session.created_at;
+        const startTime = new Date(sessionTime).getTime();
+        const bucket = hourlyBuckets.find(b => startTime >= b.timestamp && startTime < b.timestamp + 3600 * 1000);
+        if (bucket) {
+            const duration = Number(session.duration_sec) > 0 ? Number(session.duration_sec) : 120; // 0秒なら2分と仮定
+            const jpyLoss = (duration / 3600) * hourlyWageJpy;
+            const btcLoss = btcPrice > 0 ? (jpyLoss / btcPrice) : 0;
+            bucket.lossBtc += btcLoss;
+        }
+    });
+
+    // 累積和に変換
+    let cumulativeLoss = 0;
+    const hourlyStats = hourlyBuckets.map(bucket => {
+        cumulativeLoss += bucket.lossBtc;
+        return {
+            ...bucket,
+            cumulativeLossBtc: Number(cumulativeLoss.toFixed(8))
+        };
+    });
 
     return {
         score,
         history: [{ timestamp: Date.now(), score }],
         todos,
+        missionProgress: {
+            goals: [goalPrimary, goalSecondary],
+            activeTarget,
+            activeProgress,
+            createdLifetime,
+            completedLifetime,
+            persistence: todoProgress.persistence,
+            byGoal: [
+                buildGoalState(completedLifetime, goalPrimary),
+                buildGoalState(completedLifetime, goalSecondary),
+            ],
+        },
         blacklist,
         timeData,
         siteBreakdown,
+        hourlyStats,
         totalTimeSeconds,
         assets,
     };

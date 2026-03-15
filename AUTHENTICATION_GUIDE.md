@@ -87,7 +87,8 @@
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-NEXT_PUBLIC_API_BASE=http://localhost:3001/api
+# 任意: 外部APIを使う場合のみ設定
+# NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 ### API サーバー (.env)
@@ -95,7 +96,7 @@ NEXT_PUBLIC_API_BASE=http://localhost:3001/api
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 SUPABASE_ANON_KEY=your-anon-key-here
-PORT=3001
+# API は 127.0.0.1:3001 で固定起動（PORT は Next.js 側で利用）
 ```
 
 ## セットアップ手順
@@ -127,11 +128,8 @@ npm install -w apps/api
 
 ### 4. アプリケーション起動
 ```bash
-# Web アプリ（ターミナル1）
-npm run dev -w apps/web
-
-# API サーバー（ターミナル2）
-npm run dev -w apps/api
+# ルートで API + Web を同時起動
+npm run dev
 ```
 
 ## 認証フロー
@@ -192,6 +190,7 @@ npm run dev -w apps/api
 3. コンソールエラーを確認
 
 ### CORS エラー
+- まず Web 側からは `/api/*` の同一オリジン経由になっているか確認
 - API サーバーで CORS が有効になっているか確認
 - `apps/api/src/app.js` に `const cors = require('cors');` と `app.use(cors());` があるか確認
 

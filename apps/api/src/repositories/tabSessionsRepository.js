@@ -11,10 +11,25 @@ async function insertTabSession(session) {
     const { data, error } = await supabase
         .from('tab_sessions')
         .insert(session)
-        .select('id, domain, duration_sec, created_at')
+        .select('id, domain, duration_sec, started_at, created_at')
         .single();
 
     if (error) throw error;
+    return data;
+}
+// 大量セッションを一括記録
+async function insertTabSessionsBulk(sessions) {
+    if (sessions.length === 0) return [];
+
+    const { data, error } = await supabase
+        .from('tab_sessions')
+        .insert(sessions)
+        .select();
+
+    if (error) {
+        console.error('Bulk insert failed:', error.message);
+        throw error;
+    }
     return data;
 }
 
@@ -22,9 +37,9 @@ async function insertTabSession(session) {
 async function listTabSessionsByUser(userId) {
     const { data, error } = await supabase
         .from('tab_sessions')
-        .select('domain, duration_sec, created_at')
+        .select('domain, duration_sec, started_at, created_at')
         .eq('user_id', userId)
-        .order('created_at', { ascending: true });
+        .order('started_at', { ascending: true });
 
     if (error) throw error;
     return data || [];
@@ -45,6 +60,7 @@ async function getTodayDurationByDomain(userId, domain, dayStartIso) {
 
 module.exports = {
     insertTabSession,
+    insertTabSessionsBulk,
     listTabSessionsByUser,
     getTodayDurationByDomain,
 };

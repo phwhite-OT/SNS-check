@@ -37,7 +37,8 @@ cp .env.example .env.local
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5...（Supabase から取得）
-NEXT_PUBLIC_API_BASE=http://localhost:3001/api
+# 任意: 外部APIを使う場合のみ設定
+# NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 ### 2.2 API サーバーの設定
@@ -51,7 +52,7 @@ cp .env.example .env
 SUPABASE_URL=https://your-project-xxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5...（Supabase から取得）
 SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5...（Supabase から取得）
-PORT=3001
+# API は 127.0.0.1:3001 で固定起動（PORT は Next.js 側で利用）
 DEFAULT_USER_ID=00000000-0000-0000-0000-000000000000
 DEFAULT_SCORE_BASE=1000
 SCORE_RECOVERY_PER_DONE_TODO=50
@@ -60,23 +61,14 @@ SCORE_PENALTY_PER_SECOND=1
 
 ## 🏃 Step 3: アプリケーション起動
 
-### 3.1 API サーバー起動
+### 3.1 API + Web を同時起動
 ```bash
-npm run dev -w apps/api
+npm run dev
 ```
 
 ✅ 以下のメッセージが出れば成功：
 ```
-Server is running on http://localhost:3001
-```
-
-### 3.2 Web アプリ起動（新しいターミナルウィンドウで）
-```bash
-npm run dev -w apps/web
-```
-
-✅ 以下のメッセージが出れば成功：
-```
+API Server running internally on http://127.0.0.1:3001
 - Local:        http://localhost:3000
 ```
 
@@ -121,7 +113,7 @@ grep SUPABASE apps/api/.env
 
 **原因2: API サーバーが起動していない**
 ```bash
-npm run dev -w apps/api
+npm run dev
 ```
 
 **原因3: ユーザーが勝手に確認待ちの場合**
@@ -139,7 +131,7 @@ Access to XMLHttpRequest has been blocked by CORS policy
 ```
 
 **解決:**
-- API サーバーが http://localhost:3001 で動作しているか確認
+- ルートで `npm run dev` を起動し、`API Server running internally on http://127.0.0.1:3001` が表示されるか確認
 - `apps/api/src/app.js` に `app.use(cors());` があるか確認
 
 ## 📚 次のステップ
