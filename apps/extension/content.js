@@ -1,14 +1,15 @@
 // 🕵️ Dashboardから同期用データを取得するスクリプト
 (function () {
-    const syncEl = document.getElementById('extension-sync-data');
-    if (syncEl) {
+    function trySync() {
+        const syncEl = document.getElementById('extension-sync-data');
+        if (!syncEl) return false;
+
         const userId = syncEl.getAttribute('data-user-id');
         const apiUrl = syncEl.getAttribute('data-api-url');
 
-        if (userId || apiUrl) {
+        if (userId && apiUrl) {
             console.log('🔄 Dashboard sync data detected:', { userId, apiUrl });
             
-            // 背景（background.js）に保存を依頼
             chrome.runtime.sendMessage({
                 type: 'sync:config',
                 config: { userId, apiUrl }
@@ -19,6 +20,19 @@
                     console.log('✅ Extension configuration synchronized automatically.');
                 }
             });
+            return true;
         }
+        return false;
+    }
+
+    // 初回実行
+    if (!trySync()) {
+        // 見つからない場合は、DOMの変化を監視（SPA遷移対策）
+        const observer = new MutationObserver((mutations, obs) => {
+            if (trySync()) {
+                obs.disconnect(); // 同期に成功したら停止
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
     }
 })();
