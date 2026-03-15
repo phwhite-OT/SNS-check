@@ -41,6 +41,18 @@ const API_BASE = (
 ).replace(/\/$/, '');
 
 const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
+const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+
+function toDueTimestamp(dueDate) {
+  if (!dueDate) return Number.POSITIVE_INFINITY;
+  const ts = new Date(`${dueDate}T00:00:00`).getTime();
+  return Number.isFinite(ts) ? ts : Number.POSITIVE_INFINITY;
+}
+
+function resolveAllTasksFoldHeight(viewportHeight) {
+  if (!Number.isFinite(viewportHeight) || viewportHeight <= 0) return 340;
+  return Math.max(260, Math.min(420, Math.floor(viewportHeight * 0.42)));
+}
 
 export default function Dashboard({ user, onLogout }) {
   const [data, setData] = useState(null);
@@ -78,6 +90,13 @@ export default function Dashboard({ user, onLogout }) {
   // Task detail states
   const [viewingTask, setViewingTask] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // All tasks fold states
+  const [isAllTasksFolded, setIsAllTasksFolded] = useState(true);
+  const [shouldFoldAllTasks, setShouldFoldAllTasks] = useState(false);
+  const [allTasksFoldHeight, setAllTasksFoldHeight] = useState(340);
+  const allTasksListRef = useRef(null);
+  const allTasksHadOverflowRef = useRef(false);
 
   // Fetch data (with user ID from auth)
   const fetchData = async () => {
@@ -410,12 +429,63 @@ export default function Dashboard({ user, onLogout }) {
     // 親タスクをソート
     parents.sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1;
-      const priorityRank = { high: 0, medium: 1, low: 2 };
-      return (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3);
+      return (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3);
     });
 
     return { parents, childrenMap };
   }, [filteredTodos]);
+
+  const allTodosSorted = useMemo(() => {
+    return [...(data?.todos || [])].sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+
+      const dueA = toDueTimestamp(a.dueDate);
+      const dueB = toDueTimestamp(b.dueDate);
+      if (dueA !== dueB) return dueA - dueB;
+
+      const priorityA = PRIORITY_ORDER[a.priority] ?? 3;
+      const priorityB = PRIORITY_ORDER[b.priority] ?? 3;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+
+      return (a.title || '').localeCompare((b.title || ''), 'ja');
+    });
+  }, [data?.todos]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return;
+
+    const updateFoldState = () => {
+      const listElement = allTasksListRef.current;
+      const nextFoldHeight = resolveAllTasksFoldHeight(window.innerHeight);
+      setAllTasksFoldHeight(nextFoldHeight);
+
+      if (!listElement) {
+        setShouldFoldAllTasks(false);
+        setIsAllTasksFolded(false);
+        allTasksHadOverflowRef.current = false;
+        return;
+      }
+
+      const needsFold = listElement.scrollHeight > nextFoldHeight;
+      setShouldFoldAllTasks(needsFold);
+
+      if (!needsFold) {
+        setIsAllTasksFolded(false);
+      } else if (!allTasksHadOverflowRef.current) {
+        setIsAllTasksFolded(true);
+      }
+
+      allTasksHadOverflowRef.current = needsFold;
+    };
+
+    const rafId = window.requestAnimationFrame(updateFoldState);
+    window.addEventListener('resize', updateFoldState);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', updateFoldState);
+    };
+  }, [allTodosSorted, activeTab]);
 
   if (isLoading) return <div className="loading">読み込み中...</div>;
   if (error) return <div className="error-card">{error}</div>;
@@ -682,6 +752,99 @@ export default function Dashboard({ user, onLogout }) {
                         </button>
                       </div>
                     </ul>
+                  </section>
+
+                  <section className="glass-card all-missions-card">
+                    <div className="card-header" style={{ marginBottom: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div className="task-card-icon">
+                          <FileText size={18} />
+                        </div>
+                        <h2>すべてのミッション</h2>
+                      </div>
+                      <span className="all-mission-count-pill">全 {allTodosSorted.length} 件</span>
+                    </div>
+
+                    {allTodosSorted.length === 0 ? (
+                      <div className="mission-empty-state">まだタスクがありません。最初のタスクを作成しましょう。</div>
+                    ) : (
+                      <>
+                        <div
+                          className={`all-missions-list-shell ${shouldFoldAllTasks && isAllTasksFolded ? 'is-folded' : ''}`}
+                          style={shouldFoldAllTasks && isAllTasksFolded ? { maxHeight: `${allTasksFoldHeight}px` } : undefined}
+                        >
+                          <ul className="todo-list all-missions-list" ref={allTasksListRef}>
+                            {allTodosSorted.map((todo) => {
+                              const priority = PRIORITY_ORDER[todo.priority] !== undefined ? todo.priority : 'medium';
+                              const dueTimestamp = toDueTimestamp(todo.dueDate);
+                              const dueLabel = Number.isFinite(dueTimestamp)
+                                ? format(new Date(dueTimestamp), 'yyyy/MM/dd', { locale: ja })
+                                : null;
+                              const rel = dueLabel ? getRelativeDateLabel(todo.dueDate) : null;
+
+                              return (
+                                <li key={todo.id} className={`todo-item all-mission-item ${todo.completed ? 'completed' : ''}`}>
+                                  <div
+                                    className="checkbox-custom"
+                                    onClick={() => handleToggleTodo(todo.id, todo.completed)}
+                                  >
+                                    {todo.completed && <CheckCircle size={18} color="white" fill="white" />}
+                                  </div>
+
+                                  <div
+                                    className="todo-content-wrapper all-mission-main"
+                                    style={{ flex: 1, cursor: 'pointer' }}
+                                    onClick={() => {
+                                      setViewingTask(todo);
+                                      setIsDetailModalOpen(true);
+                                    }}
+                                  >
+                                    <div className="all-mission-top">
+                                      <span className="todo-text all-mission-title">{todo.title}</span>
+                                      <span className={`priority-tag ${priority}`} style={{ fontSize: '0.63rem', padding: '2px 6px', borderRadius: '4px', background: '#f1f5f9', fontWeight: 700 }}>
+                                        {priority.toUpperCase()}
+                                      </span>
+                                    </div>
+
+                                    <div className="all-mission-meta">
+                                      {dueLabel ? (
+                                        <span className={`date-badge ${rel?.className || 'upcoming'}`}>
+                                          <Clock size={12} /> {dueLabel} ({rel?.label || '予定日'})
+                                        </span>
+                                      ) : (
+                                        <span className="all-mission-no-date">期限未設定</span>
+                                      )}
+                                    </div>
+
+                                    {todo.description && (
+                                      <p className="all-mission-desc">
+                                        {todo.description.replace(/\[parent:[^\]]+\]\s*/, '')}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <Trash2
+                                    size={18}
+                                    className="text-muted cursor-pointer hover:text-red-500"
+                                    onClick={() => handleDeleteTodo(todo.id)}
+                                  />
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+
+                        {shouldFoldAllTasks && (
+                          <button
+                            type="button"
+                            className="all-missions-fold-btn"
+                            onClick={() => setIsAllTasksFolded((prev) => !prev)}
+                          >
+                            {isAllTasksFolded ? 'すべてのタスクを表示する' : '一覧を折りたたむ'}
+                          </button>
+                        )}
+                      </>
+                    )}
                   </section>
                 </div>
 
@@ -1143,6 +1306,107 @@ export default function Dashboard({ user, onLogout }) {
       )}
 
       <style jsx>{`
+        .all-missions-card {
+          overflow: hidden;
+        }
+        .all-mission-count-pill {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          min-height: 22px;
+          padding: 0 0.65rem;
+          font-size: 0.68rem;
+          font-weight: 800;
+          color: #0f766e;
+          background: rgba(15, 118, 110, 0.12);
+          border: 1px solid rgba(15, 118, 110, 0.2);
+        }
+        .all-missions-list-shell {
+          position: relative;
+          transition: max-height 0.28s ease;
+        }
+        .all-missions-list-shell.is-folded {
+          overflow: hidden;
+        }
+        .all-missions-list-shell.is-folded::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: 88px;
+          pointer-events: none;
+          background: linear-gradient(to bottom, rgba(244, 249, 248, 0), rgba(244, 249, 248, 0.96));
+        }
+        .all-missions-list {
+          gap: 0.6rem;
+        }
+        .all-mission-item {
+          padding: 0.82rem;
+        }
+        .all-mission-main {
+          min-width: 0;
+        }
+        .all-mission-top {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 0.5rem;
+        }
+        .all-mission-title {
+          font-size: 0.9rem;
+          line-height: 1.35;
+          overflow-wrap: anywhere;
+        }
+        .all-mission-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-top: 0.3rem;
+          flex-wrap: wrap;
+        }
+        .all-mission-no-date {
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          padding: 0.12rem 0.55rem;
+          font-size: 0.67rem;
+          font-weight: 800;
+          border: 1px solid rgba(148, 163, 184, 0.28);
+          background: rgba(148, 163, 184, 0.12);
+          color: var(--tf-text-muted);
+        }
+        .all-mission-desc {
+          margin: 0.3rem 0 0;
+          font-size: 0.78rem;
+          color: var(--tf-text-muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .all-missions-fold-btn {
+          width: 100%;
+          margin-top: 0.82rem;
+          border-radius: 10px;
+          border: 1px solid rgba(15, 118, 110, 0.24);
+          background: rgba(15, 118, 110, 0.08);
+          color: #0f766e;
+          font-size: 0.82rem;
+          font-weight: 800;
+          padding: 0.62rem 0.8rem;
+          cursor: pointer;
+          transition: background 0.2s ease, transform 0.2s ease;
+        }
+        .all-missions-fold-btn:hover {
+          background: rgba(15, 118, 110, 0.16);
+          transform: translateY(-1px);
+        }
+        @media (max-width: 768px) {
+          .all-missions-list-shell.is-folded::after {
+            height: 70px;
+          }
+        }
         .analysis-view {
           padding-bottom: 2rem;
         }
