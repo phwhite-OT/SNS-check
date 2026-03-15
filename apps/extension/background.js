@@ -1,8 +1,40 @@
-// 📡 APIサーバーの送信先アドレス
-const API_BASE = 'http://localhost:3001/api';
-const API_ENDPOINT = `${API_BASE}/time`;
-// TODO: Supabaseの profiles.id（実在UUID）に置き換えてください。
-const X_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
+// 📡 APIサーバーの設定（自動同期またはフォールバック）
+let API_BASE = 'http://localhost:3001/api';
+let API_ENDPOINT = `${API_BASE}/time`;
+let X_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
+
+// 保存された設定を読み込む
+function loadConfig() {
+    chrome.storage.local.get(['apiUrl', 'userId'], (result) => {
+        if (result.apiUrl) {
+            API_BASE = result.apiUrl;
+            API_ENDPOINT = `${API_BASE}/time`;
+        }
+        if (result.userId) {
+            X_USER_ID = result.userId;
+        }
+        console.log('📡 Loaded Config:', { API_BASE, X_USER_ID });
+    });
+}
+
+// 初期化時に読み込み
+loadConfig();
+
+// 設定変更メッセージの待機
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'sync:config') {
+        const { userId, apiUrl } = message.config;
+        const updates = {};
+        if (userId) updates.userId = userId;
+        if (apiUrl) updates.apiUrl = apiUrl;
+
+        chrome.storage.local.set(updates, () => {
+            loadConfig();
+            sendResponse({ success: true });
+        });
+        return true;
+    }
+});
 
 // API取得不可でも最低限ロックできるフォールバック
 const FALLBACK_TARGET_SITES = {
