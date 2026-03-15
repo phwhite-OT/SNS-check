@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -27,7 +27,8 @@ import {
   TrendingDown,
   TrendingUp,
   ExternalLink,
-  LogOut
+  LogOut,
+  LoaderCircle
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -56,12 +57,19 @@ export default function Dashboard({ user, onLogout }) {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isWelcomeBannerVisible, setIsWelcomeBannerVisible] = useState(true);
   
+  const [isCreatingTodo, setIsCreatingTodo] = useState(false);
+  const [deletingTodoId, setDeletingTodoId] = useState(null);
+  const [togglingTodoMap, setTogglingTodoMap] = useState({});
+  const latestFetchRequestIdRef = useRef(0);
+  const togglingTodoSetRef = useRef(new Set());
+
   // Task detail states
   const [viewingTask, setViewingTask] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // Fetch data (with user ID from auth)
   const fetchData = async () => {
+    const requestId = ++latestFetchRequestIdRef.current;
     try {
       const res = await fetch(`${API_BASE}/dashboard`, {
         headers: {
@@ -70,12 +78,15 @@ export default function Dashboard({ user, onLogout }) {
       });
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
+      if (requestId !== latestFetchRequestIdRef.current) return;
       setData(json);
       setError(null);
     } catch (err) {
+      if (requestId !== latestFetchRequestIdRef.current) return;
       console.error(err);
       setError('APIに接続できません。バックエンドが起動しているか確認してください。');
     } finally {
+      if (requestId !== latestFetchRequestIdRef.current) return;
       setIsLoading(false);
     }
   };
@@ -89,10 +100,11 @@ export default function Dashboard({ user, onLogout }) {
   // Actions
   const handleAddTodo = async (e) => {
     e.preventDefault();
-    if (!newTodoTitle.trim()) return;
+    if (!newTodoTitle.trim() || isCreatingTodo) return;
     const tagsArray = newTodoTags.split(',').map(tag => tag.trim()).filter(Boolean);
+    setIsCreatingTodo(true);
     try {
-      await fetch(`${API_BASE}/todos`, {
+      const response = await fetch(`${API_BASE}/todos`, {
         method: 'POST',
         headers: {
           'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
@@ -106,39 +118,119 @@ export default function Dashboard({ user, onLogout }) {
           priority: newTodoPriority
         })
       });
+
+      if (!response.ok) {
+        throw new Error('Todo creation failed');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+
       setNewTodoTitle('');
       setNewTodoDesc('');
       setNewTodoTags('');
       setNewTodoPriority('medium');
       setIsTaskModalOpen(false);
       fetchData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCreatingTodo(false);
+    }
   };
 
   const handleToggleTodo = async (id, currentStatus) => {
+    if (!id) return;
+    if (togglingTodoSetRef.current.has(id)) return;
+
+    const nextCompleted = !currentStatus;
+    togglingTodoSetRef.current.add(id);
+    setTogglingTodoMap((prev) => ({ ...prev, [id]: true }));
+
+    // 楽観更新: 先にUI反映して体感速度を上げる
+    setData((prev) => {
+      if (!prev) return prev;
+      const todos = Array.isArray(prev.todos) ? prev.todos : [];
+      return {
+        ...prev,
+        todos: todos.map((todo) =>
+          todo.id === id ? { ...todo, completed: nextCompleted } : todo
+        ),
+      };
+    });
+
+    setViewingTask((prev) => {
+      if (!prev || prev.id !== id) return prev;
+      return { ...prev, completed: nextCompleted };
+    });
+
     try {
-      await fetch(`${API_BASE}/todos/${id}`, {
+      const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'PUT',
         headers: {
           'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ completed: !currentStatus })
+        body: JSON.stringify({ completed: nextCompleted })
       });
+
+      if (!response.ok) {
+        throw new Error('Todo toggle failed');
+      }
+
+      // サーバーの正本で同期
       fetchData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+
+      // 失敗時はロールバック
+      setData((prev) => {
+        if (!prev) return prev;
+        const todos = Array.isArray(prev.todos) ? prev.todos : [];
+        return {
+          ...prev,
+          todos: todos.map((todo) =>
+            todo.id === id ? { ...todo, completed: currentStatus } : todo
+          ),
+        };
+      });
+
+      setViewingTask((prev) => {
+        if (!prev || prev.id !== id) return prev;
+        return { ...prev, completed: currentStatus };
+      });
+    } finally {
+      togglingTodoSetRef.current.delete(id);
+      setTogglingTodoMap((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
   };
 
   const handleDeleteTodo = async (id) => {
+    if (!id || deletingTodoId === id) return;
+    setDeletingTodoId(id);
     try {
-      await fetch(`${API_BASE}/todos/${id}`, {
+      const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
         },
       });
+
+      if (!response.ok) {
+        throw new Error('Todo delete failed');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+
       fetchData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDeletingTodoId(null);
+    }
   };
 
   const handleDeleteBlacklist = async (domain) => {
@@ -338,11 +430,19 @@ export default function Dashboard({ user, onLogout }) {
                     <ul className="todo-list">
                       {filteredTodos.map(todo => (
                         <li key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
-                          <div className="checkbox-custom" onClick={() => handleToggleTodo(todo.id, todo.completed)}>
-                            {todo.completed && <CheckCircle size={18} color="white" fill="white" />}
+                          <div
+                            className="checkbox-custom"
+                            onClick={() => !togglingTodoMap[todo.id] && handleToggleTodo(todo.id, todo.completed)}
+                            style={{ opacity: togglingTodoMap[todo.id] ? 0.7 : 1, pointerEvents: togglingTodoMap[todo.id] ? 'none' : 'auto' }}
+                          >
+                            {togglingTodoMap[todo.id] ? (
+                              <LoaderCircle size={16} />
+                            ) : (
+                              todo.completed && <CheckCircle size={18} color="white" fill="white" />
+                            )}
                           </div>
-                          <div 
-                            className="todo-content-wrapper" 
+                          <div
+                            className="todo-content-wrapper"
                             style={{ flex: 1, cursor: 'pointer' }}
                             onClick={() => {
                               setViewingTask(todo);
@@ -364,7 +464,13 @@ export default function Dashboard({ user, onLogout }) {
                             {todo.description && <div className="todo-description text-muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{todo.description}</div>}
                           </div>
                           <div className="flex gap-2 items-center">
-                            <Trash2 size={18} className="text-muted cursor-pointer hover:text-red-500" onClick={() => handleDeleteTodo(todo.id)} />
+                            {deletingTodoId === todo.id ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#6b7280', fontSize: '0.75rem' }}>
+                                <LoaderCircle size={16} /> 削除中...
+                              </span>
+                            ) : (
+                              <Trash2 size={18} className="text-muted cursor-pointer hover:text-red-500" onClick={() => handleDeleteTodo(todo.id)} />
+                            )}
                             <MoreVertical size={18} className="text-muted cursor-pointer" />
                           </div>
                         </li>
@@ -397,7 +503,7 @@ export default function Dashboard({ user, onLogout }) {
                           const isActive = selectedDate === dateStr;
                           const dayTodos = todosOnDay(day);
                           const hasTodos = dayTodos.length > 0;
-                          
+
                           // 最高優先度を判定
                           let maxPriority = 'low';
                           if (dayTodos.some(t => t.priority === 'high')) maxPriority = 'high';
@@ -579,9 +685,9 @@ export default function Dashboard({ user, onLogout }) {
                       <div className="full-calendar-day-num">{format(day, 'd')}</div>
                       <div className="full-calendar-tasks">
                         {dayTodos.slice(0, 3).map(todo => (
-                          <div 
-                            key={todo.id} 
-                            className={`calendar-task-badge ${todo.completed ? 'completed' : ''}`} 
+                          <div
+                            key={todo.id}
+                            className={`calendar-task-badge ${todo.completed ? 'completed' : ''}`}
                             style={{ borderLeftColor: todo.priority === 'high' ? '#ef4444' : todo.priority === 'medium' ? '#f59e0b' : '#10b981', cursor: 'pointer' }}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -605,29 +711,46 @@ export default function Dashboard({ user, onLogout }) {
 
       {/* Task Creation Modal */}
       {isTaskModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsTaskModalOpen(false)}>
+        <div className="modal-overlay" onClick={() => !isCreatingTodo && setIsTaskModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>新規タスク作成</h2>
-              <X className="cursor-pointer text-muted" onClick={() => setIsTaskModalOpen(false)} />
+              <X className="cursor-pointer text-muted" onClick={() => !isCreatingTodo && setIsTaskModalOpen(false)} />
             </div>
             <form onSubmit={handleAddTodo} className="modal-form">
+              {isCreatingTodo && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.9rem 1rem',
+                    borderRadius: '12px',
+                    background: '#eef2ff',
+                    color: '#4338ca',
+                    fontWeight: 700,
+                  }}
+                >
+                  <LoaderCircle size={18} />
+                  <span>タスクを保存しています...</span>
+                </div>
+              )}
               <div className="form-group">
                 <label>タスク名</label>
-                <input type="text" value={newTodoTitle} onChange={(e) => setNewTodoTitle(e.target.value)} placeholder="タスク名を入力..." required />
+                <input type="text" value={newTodoTitle} onChange={(e) => setNewTodoTitle(e.target.value)} placeholder="タスク名を入力..." required disabled={isCreatingTodo} />
               </div>
               <div className="form-group">
                 <label>詳細説明</label>
-                <textarea value={newTodoDesc} onChange={(e) => setNewTodoDesc(e.target.value)} placeholder="詳細を入力..." rows="3" />
+                <textarea value={newTodoDesc} onChange={(e) => setNewTodoDesc(e.target.value)} placeholder="詳細を入力..." rows="3" disabled={isCreatingTodo} />
               </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>期限日</label>
-                  <input type="date" value={newTodoDate} onChange={(e) => setNewTodoDate(e.target.value)} />
+                  <input type="date" value={newTodoDate} onChange={(e) => setNewTodoDate(e.target.value)} disabled={isCreatingTodo} />
                 </div>
                 <div className="form-group">
                   <label>優先度</label>
-                  <select value={newTodoPriority} onChange={(e) => setNewTodoPriority(e.target.value)}>
+                  <select value={newTodoPriority} onChange={(e) => setNewTodoPriority(e.target.value)} disabled={isCreatingTodo}>
                     <option value="low">低</option>
                     <option value="medium">中</option>
                     <option value="high">高</option>
@@ -636,11 +759,13 @@ export default function Dashboard({ user, onLogout }) {
               </div>
               <div className="form-group">
                 <label>タグ (カンマ区切り)</label>
-                <input type="text" value={newTodoTags} onChange={(e) => setNewTodoTags(e.target.value)} placeholder="仕事, UI, バグ" />
+                <input type="text" value={newTodoTags} onChange={(e) => setNewTodoTags(e.target.value)} placeholder="仕事, UI, バグ" disabled={isCreatingTodo} />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setIsTaskModalOpen(false)}>キャンセル</button>
-                <button type="submit" className="btn-submit">作成</button>
+                <button type="button" className="btn-cancel" onClick={() => setIsTaskModalOpen(false)} disabled={isCreatingTodo}>キャンセル</button>
+                <button type="submit" className="btn-submit" disabled={isCreatingTodo}>
+                  {isCreatingTodo ? '保存中...' : '作成'}
+                </button>
               </div>
             </form>
           </div>
@@ -660,7 +785,7 @@ export default function Dashboard({ user, onLogout }) {
               </div>
               <X className="cursor-pointer text-muted" onClick={() => setIsDetailModalOpen(false)} />
             </div>
-            
+
             <div className="task-detail-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
                 <label style={{ fontSize: '0.85rem', color: 'var(--tf-text-muted)', fontWeight: 600 }}>タスク名</label>
@@ -689,25 +814,29 @@ export default function Dashboard({ user, onLogout }) {
               </div>
 
               <div className="modal-actions" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--tf-border)', paddingTop: '1.5rem' }}>
-                <button 
-                  className="btn-cancel" 
+                <button
+                  className="btn-cancel"
                   style={{ marginRight: 'auto', color: 'var(--tf-accent-red)', borderColor: 'var(--tf-accent-red)' }}
-                  onClick={() => {
-                    handleDeleteTodo(viewingTask.id);
+                  disabled={deletingTodoId === viewingTask.id}
+                  onClick={async () => {
+                    await handleDeleteTodo(viewingTask.id);
                     setIsDetailModalOpen(false);
                   }}
                 >
-                  削除する
+                  {deletingTodoId === viewingTask.id ? '削除中...' : '削除する'}
                 </button>
-                <button 
-                  className="btn-submit" 
+                <button
+                  className="btn-submit"
                   style={{ background: viewingTask.completed ? 'var(--tf-text-muted)' : 'var(--tf-primary)' }}
+                  disabled={!!togglingTodoMap[viewingTask.id]}
                   onClick={() => {
                     handleToggleTodo(viewingTask.id, viewingTask.completed);
                     setIsDetailModalOpen(false);
                   }}
                 >
-                  {viewingTask.completed ? '未完了に戻す' : '完了にする'}
+                  {togglingTodoMap[viewingTask.id]
+                    ? '更新中...'
+                    : (viewingTask.completed ? '未完了に戻す' : '完了にする')}
                 </button>
               </div>
             </div>
