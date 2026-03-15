@@ -170,7 +170,6 @@ export default function Dashboard({ user, onLogout }) {
   // Blacklist states
   const [blacklistInput, setBlacklistInput] = useState('');
   const [blacklistActionDomain, setBlacklistActionDomain] = useState(null);
-  const [blacklistError, setBlacklistError] = useState(null);
 
   // Fetch data (with user ID from auth)
   const fetchData = async () => {
@@ -452,18 +451,29 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
-  const handleAddBlacklist = async (rawDomain) => {
+  const handleAddBlacklist = async (inputOrEvent) => {
+    if (inputOrEvent && typeof inputOrEvent.preventDefault === 'function') {
+      inputOrEvent.preventDefault();
+    }
+
+    const rawDomain = (inputOrEvent && typeof inputOrEvent.preventDefault === 'function')
+      ? newBlacklistDomain
+      : inputOrEvent;
+
     const normalized = normalizeDomainInput(rawDomain);
     if (!isValidDomainCandidate(normalized)) {
       setBlacklistError('有効なドメインを入力してください（例: youtube.com）。');
       return;
     }
 
+    if (blacklistBusy) return;
+
+    setBlacklistBusy(true);
     setBlacklistActionDomain(normalized);
-    setBlacklistError(null);
+    setBlacklistError('');
 
     try {
-      const response = await fetch(`${API_BASE}/blacklist`, {
+      const response = await fetch(`${apiBase}/blacklist`, {
         method: 'POST',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -477,6 +487,9 @@ export default function Dashboard({ user, onLogout }) {
         throw new Error(errorData?.error || 'ドメイン追加に失敗しました。');
       }
 
+      if (inputOrEvent && typeof inputOrEvent.preventDefault === 'function') {
+        setNewBlacklistDomain('');
+      }
       setBlacklistInput('');
       await fetchData();
     } catch (e) {
@@ -484,6 +497,7 @@ export default function Dashboard({ user, onLogout }) {
       setBlacklistError(e.message || 'ドメイン追加に失敗しました。');
     } finally {
       setBlacklistActionDomain(null);
+      setBlacklistBusy(false);
     }
   };
 
@@ -493,11 +507,14 @@ export default function Dashboard({ user, onLogout }) {
       return;
     }
 
+    if (blacklistBusy) return;
+
+    setBlacklistBusy(true);
     setBlacklistActionDomain(normalized);
-    setBlacklistError(null);
+    setBlacklistError('');
 
     try {
-      const response = await fetch(`${API_BASE}/blacklist/${encodeURIComponent(normalized)}`, {
+      const response = await fetch(`${apiBase}/blacklist/${encodeURIComponent(normalized)}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -515,43 +532,6 @@ export default function Dashboard({ user, onLogout }) {
       setBlacklistError(e.message || 'ドメイン削除に失敗しました。');
     } finally {
       setBlacklistActionDomain(null);
-        throw new Error('Blacklist delete failed');
-      }
-
-      fetchData();
-    } catch (e) { console.error(e); }
-    finally {
-      setBlacklistBusy(false);
-    }
-  };
-
-  const handleAddBlacklist = async (event) => {
-    event.preventDefault();
-
-    if (!newBlacklistDomain.trim() || blacklistBusy) return;
-
-    setBlacklistError('');
-    setBlacklistBusy(true);
-    try {
-      const response = await fetch(`${apiBase}/blacklist`, {
-        method: 'POST',
-        headers: {
-          'x-user-id': user?.id || DEFAULT_USER_ID,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ domain: newBlacklistDomain.trim() }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Blacklist create failed');
-      }
-
-      setNewBlacklistDomain('');
-      fetchData();
-    } catch (e) {
-      console.error(e);
-      setBlacklistError('ブラックリストの更新に失敗しました。');
-    } finally {
       setBlacklistBusy(false);
     }
   };
