@@ -34,12 +34,30 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-const API_BASE = (
+function normalizeApiBase(rawBase) {
+  const trimmed = String(rawBase || '').trim().replace(/\/$/, '');
+  if (!trimmed) return '/api';
+  if (trimmed.startsWith('/')) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    const host = String(url.hostname || '').toLowerCase();
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    if (isLocalHost && url.protocol === 'https:') {
+      url.protocol = 'http:';
+    }
+    return url.toString().replace(/\/$/, '');
+  } catch (_error) {
+    return trimmed;
+  }
+}
+
+const API_BASE = normalizeApiBase(
   process.env.NEXT_PUBLIC_API_BASE ||
   (process.env.NEXT_PUBLIC_API_URL
     ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`
     : '/api')
-).replace(/\/$/, '');
+);
 const FOCUS_MODE_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
 const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
@@ -156,6 +174,9 @@ export default function Dashboard({ user, onLogout }) {
   const [newTodoEstimate, setNewTodoEstimate] = useState(''); // 分単位
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isWelcomeBannerVisible, setIsWelcomeBannerVisible] = useState(true);
+  const [newBlacklistDomain, setNewBlacklistDomain] = useState('');
+  const [blacklistBusy, setBlacklistBusy] = useState(false);
+  const [blacklistError, setBlacklistError] = useState('');
 
   // Focus mode states
   const [focusModeEnabled, setFocusModeEnabled] = useState(false);
@@ -509,7 +530,7 @@ export default function Dashboard({ user, onLogout }) {
     setBlacklistError('');
 
     try {
-      const response = await fetch(`${apiBase}/blacklist`, {
+      const response = await fetch(`${API_BASE}/blacklist`, {
         method: 'POST',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -550,7 +571,7 @@ export default function Dashboard({ user, onLogout }) {
     setBlacklistError('');
 
     try {
-      const response = await fetch(`${apiBase}/blacklist/${encodeURIComponent(normalized)}`, {
+      const response = await fetch(`${API_BASE}/blacklist/${encodeURIComponent(normalized)}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
