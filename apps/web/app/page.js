@@ -101,7 +101,27 @@ export default function Home() {
 
   // ログイン状態に応じて画面を切り替え
   if (!user) {
-    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <div className="login-page">
+        <div className="login-layout">
+          <div className="login-left">
+            <div className="login-deco">
+              <div className="login-deco-card login-deco-card--large" />
+              <div className="login-deco-card login-deco-card--medium" />
+              <div className="login-deco-card login-deco-card--small" />
+              <div className="login-deco-badge" />
+            </div>
+            <div className="login-copy">
+              <h1 className="login-title">時間に縛られるな、時間を使いこなせ</h1>
+              <p className="login-subtitle">タスクと時間を可視化して、充実した日々に。</p>
+            </div>
+          </div>
+          <div className="login-right">
+            <LoginPage onLoginSuccess={handleLoginSuccess} />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ログイン済み：ダッシュボード表示
