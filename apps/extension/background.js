@@ -4,16 +4,35 @@ const API_ENDPOINT = `${API_BASE}/time`;
 // TODO: Supabaseの profiles.id（実在UUID）に置き換えてください。
 const X_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
-// 🔒 ロック閾値（秒）：この時間を超えると ACCESS DENIED 画面を表示
-// 変更したい場合はこの値を書き換えてください（例：30分 = 30 * 60）
-const LOCK_THRESHOLD_SECONDS = 5; // 15分
+// API取得不可でも最低限ロックできるフォールバック
+const FALLBACK_TARGET_SITES = {
+    'youtube.com': 'YouTube',
+    'x.com': 'X',
+    'twitter.com': 'Twitter',
+    'instagram.com': 'Instagram',
+    'tiktok.com': 'TikTok',
+};
 
 // 動的なターゲットサイト一覧
-let targetSites = {};
+let targetSites = { ...FALLBACK_TARGET_SITES };
 
-// 🔒 タブごとの累積ブラックリストサイト滞在時間（秒）
-// キー: tabId、値: そのタブで今日のセッション中に累積した秒数
-const tabAccumulatedSeconds = {};
+// 🎯 集中モード（ONの時だけ即ロック）
+let focusModeEnabled = false;
+
+function loadFocusModeState() {
+    chrome.storage.local.get(['focusModeEnabled'], (result) => {
+        focusModeEnabled = !!result.focusModeEnabled;
+    });
+}
+
+function setFocusModeEnabled(enabled) {
+    focusModeEnabled = !!enabled;
+    if (!focusModeEnabled) {
+        // OFF時はロック履歴もクリアして誤挙動を防ぐ
+        lockedTabs.clear();
+    }
+    chrome.storage.local.set({ focusModeEnabled });
+}
 
 // 🔒 すでにロック画面を表示したタブ（重複発動防止）
 const lockedTabs = new Set();
@@ -32,30 +51,82 @@ async function fetchBlacklist() {
             list.forEach(item => {
                 newSites[item.domain] = item.name;
             });
-            targetSites = newSites;
+            targetSites = Object.keys(newSites).length > 0 ? newSites : { ...FALLBACK_TARGET_SITES };
         }
     } catch (e) {
-        console.error('Failed to fetch blacklist', e);
+        targetSites = { ...FALLBACK_TARGET_SITES };
     }
 }
 
 // 起動時にブラックリストを取得
 fetchBlacklist();
+loadFocusModeState();
+syncFocusModeFromApi();
+
+// ダッシュボードの集中モード状態をAPIから同期
+async function syncFocusModeFromApi() {
+    try {
+        const res = await fetch(`${API_BASE}/focus-mode`, {
+            headers: {
+                'x-user-id': X_USER_ID,
+            },
+        });
+        if (!res.ok) return;
+
+        const json = await res.json();
+        // 休憩フェーズ中はロックしない
+        const shouldLock = !!json.enabled && json.phase !== 'break';
+
+        if (shouldLock !== focusModeEnabled) {
+            setFocusModeEnabled(shouldLock);
+            if (focusModeEnabled) {
+                checkCurrentActiveTab();
+            }
+        }
+    } catch (e) {
+        // API停止時はローカル状態維持
+    }
+}
 
 // --- 状態を管理するための変数 ---
 let activeTabId = null; // 今見ているタブのID
 let activeSite = null;  // 今見ているSNSの名前（TARGET_SITESのキー名）
 let startTime = null;   // そのSNSを見始めた時間
 
+function checkCurrentActiveTab() {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime.lastError) return;
+        if (tabs[0]?.id) handleTabSwitch(tabs[0].id);
+    });
+}
+
 // 1. タブが切り替わった時（別のタブを見始めた時）に実行される処理
 chrome.tabs.onActivated.addListener((activeInfo) => {
-    handleTabSwitch(activeInfo.tabId);
+    syncFocusModeFromApi()
+        .finally(() => {
+            handleTabSwitch(activeInfo.tabId);
+        });
 });
 
 // 2. タブの中身が更新された時（URLが変わったなど）に実行される処理
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url && !changeInfo.url.includes('blocked.html')) {
+        lockedTabs.delete(tabId);
+    }
+
+    if (changeInfo.url && tab?.active) {
+        syncFocusModeFromApi()
+            .finally(() => {
+                handleTabSwitch(tabId);
+            });
+        return;
+    }
+
     if (tabId === activeTabId && changeInfo.url) {
-        handleTabSwitch(tabId);
+        syncFocusModeFromApi()
+            .finally(() => {
+                handleTabSwitch(tabId);
+            });
     }
 });
 
@@ -68,8 +139,31 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
     } else {
         // ブラウザに再び戻ってきた場合、今アクティブなタブを探す
         chrome.tabs.query({ active: true, windowId: windowId }, (tabs) => {
-            if (tabs[0]) handleTabSwitch(tabs[0].id);
+            if (tabs[0]) {
+                syncFocusModeFromApi()
+                    .finally(() => {
+                        handleTabSwitch(tabs[0].id);
+                    });
+            }
         });
+    }
+});
+
+// Popupとの通信（集中モードON/OFF）
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || !message.type) return;
+
+    if (message.type === 'focusMode:getStatus') {
+        sendResponse({ enabled: focusModeEnabled });
+        return;
+    }
+
+    if (message.type === 'focusMode:setEnabled') {
+        setFocusModeEnabled(message.enabled);
+        if (focusModeEnabled) {
+            checkCurrentActiveTab();
+        }
+        sendResponse({ enabled: focusModeEnabled });
     }
 });
 
@@ -81,11 +175,6 @@ function handleTabSwitch(tabId) {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         if (elapsed > 0) {
             saveTime(activeSite, elapsed);
-            // 🔒 タブごとの累積時間に加算
-            if (activeTabId !== null) {
-                tabAccumulatedSeconds[activeTabId] =
-                    (tabAccumulatedSeconds[activeTabId] || 0) + elapsed;
-            }
         }
     }
 
@@ -108,9 +197,14 @@ function handleTabSwitch(tabId) {
                     if (url.hostname.includes(domain)) {
                         activeSite = siteName;    // ターゲット発見！サイト名を記録。
                         startTime = Date.now();   // 見始めた時間を記録。タイマースタート！
-                        // 🔒 このタブが既に閾値を超えていたらすぐロック
-                        if ((tabAccumulatedSeconds[tabId] || 0) >= LOCK_THRESHOLD_SECONDS
-                            && !lockedTabs.has(tabId)) {
+
+                        // OFF時は絶対にロックしない
+                        if (!focusModeEnabled) {
+                            break;
+                        }
+
+                        // 🎯 集中モードONの時だけ即ロック
+                        if (focusModeEnabled && !lockedTabs.has(tabId)) {
                             triggerLockScreen(tabId, siteName);
                         }
                         break;
@@ -136,6 +230,7 @@ function saveTime(site, seconds) {
 // 「5秒ごと」に同期、「1分ごと」にブラックリスト更新
 chrome.alarms.create('syncTime', { periodInMinutes: 1 / 12 });
 chrome.alarms.create('fetchBlacklist', { periodInMinutes: 1 });
+chrome.alarms.create('syncFocusMode', { periodInMinutes: 1 / 12 });
 
 // アラームが鳴った時の処理
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -143,37 +238,25 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         syncToApi();
     } else if (alarm.name === 'fetchBlacklist') {
         fetchBlacklist();
+    } else if (alarm.name === 'syncFocusMode') {
+        syncFocusModeFromApi();
     }
 });
 
-// � --- ロック閾値チェック関数 ---
-// syncToApi（5秒ごと）から呼ばれ、累積時間が閾値を超えたらロック画面へ遷移する
-function checkLockThreshold() {
-    if (!activeSite || !startTime || activeTabId === null) return;
-    if (lockedTabs.has(activeTabId)) return;
-
-    const total = tabAccumulatedSeconds[activeTabId] || 0;
-    if (total >= LOCK_THRESHOLD_SECONDS) {
-        triggerLockScreen(activeTabId, activeSite);
-    }
-}
-
 // 🔒 --- ロック画面を表示する関数 ---
 function triggerLockScreen(tabId, siteName) {
+    // 二重安全策: OFFならロックしない
+    if (!focusModeEnabled) return;
+
     // 重複防止フラグをセット
     lockedTabs.add(tabId);
-
-    // 累積時間をリセット（ロック後に再訪した場合は新たなセッションとして計測）
-    delete tabAccumulatedSeconds[tabId];
 
     // アクティブ計測をリセット（onUpdated が発火してもタイマーが二重にならないように）
     activeSite = null;
     startTime = null;
 
-    // 経過分数を計算して URL パラメータとして渡す
-    const elapsedMin = Math.round(LOCK_THRESHOLD_SECONDS / 60);
     const blockedUrl = chrome.runtime.getURL(
-        `blocked.html?site=${encodeURIComponent(siteName)}&limit=${elapsedMin}&elapsed=${elapsedMin}`
+        `blocked.html?site=${encodeURIComponent(siteName)}&limit=集中モード&elapsed=集中モード`
     );
 
     chrome.tabs.update(tabId, { url: blockedUrl });
@@ -182,7 +265,6 @@ function triggerLockScreen(tabId, siteName) {
 
 // 🔒 --- タブが閉じられたらトラッキングデータをクリーンアップ ---
 chrome.tabs.onRemoved.addListener((tabId) => {
-    delete tabAccumulatedSeconds[tabId];
     lockedTabs.delete(tabId);
 });
 
@@ -192,14 +274,7 @@ function syncToApi() {
     if (activeSite && startTime) {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         saveTime(activeSite, elapsed);
-        // 🔒 タブごとの累積時間に加算
-        if (activeTabId !== null) {
-            tabAccumulatedSeconds[activeTabId] =
-                (tabAccumulatedSeconds[activeTabId] || 0) + elapsed;
-        }
         startTime = Date.now(); // タイマーリスタート
-        // 🔒 閾値チェック（5秒ごとのアラームで定期的に確認）
-        checkLockThreshold();
     }
 
     // ブラウザに保存されているすべてのデータを取得

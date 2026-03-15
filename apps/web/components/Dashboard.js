@@ -8,6 +8,7 @@ import {
   Calendar as CalendarIcon,
   CheckCircle,
   Clock,
+  Zap,
   Search,
   Plus,
   ChevronLeft,
@@ -37,6 +38,7 @@ const API_BASE = (
   process.env.NEXT_PUBLIC_API_BASE ||
   `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/$/, '')}/api`
 ).replace(/\/$/, '');
+const FOCUS_MODE_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
 export default function Dashboard({ user, onLogout }) {
   const [data, setData] = useState(null);
@@ -56,7 +58,14 @@ export default function Dashboard({ user, onLogout }) {
   const [newTodoDate, setNewTodoDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isWelcomeBannerVisible, setIsWelcomeBannerVisible] = useState(true);
-  
+
+  // Focus mode states
+  const [focusModeEnabled, setFocusModeEnabled] = useState(false);
+  const [focusModePhase, setFocusModePhase] = useState('idle');
+  const [focusModeEndsAt, setFocusModeEndsAt] = useState(null);
+  const [focusModeLoading, setFocusModeLoading] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
   const [isCreatingTodo, setIsCreatingTodo] = useState(false);
   const [deletingTodoId, setDeletingTodoId] = useState(null);
   const [togglingTodoMap, setTogglingTodoMap] = useState({});
@@ -93,9 +102,18 @@ export default function Dashboard({ user, onLogout }) {
 
   useEffect(() => {
     fetchData();
-    const intervalId = setInterval(fetchData, 5000);
+    fetchFocusMode();
+    const intervalId = setInterval(() => {
+      fetchData();
+      fetchFocusMode();
+    }, 5000);
     return () => clearInterval(intervalId);
   }, [user]);
+
+  useEffect(() => {
+    const ticker = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(ticker);
+  }, []);
 
   // Actions
   const handleAddTodo = async (e) => {
@@ -245,6 +263,47 @@ export default function Dashboard({ user, onLogout }) {
     } catch (e) { console.error(e); }
   };
 
+  const fetchFocusMode = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/focus-mode`, {
+        headers: {
+          'x-user-id': FOCUS_MODE_USER_ID,
+        },
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      setFocusModeEnabled(!!json.enabled);
+      setFocusModePhase(json.phase || 'idle');
+      setFocusModeEndsAt(json.endsAt || null);
+    } catch (e) {
+      // API停止時は無視
+    }
+  };
+
+  const handleToggleFocusMode = async () => {
+    if (focusModeLoading) return;
+    setFocusModeLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/focus-mode`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': FOCUS_MODE_USER_ID,
+        },
+        body: JSON.stringify({ enabled: !focusModeEnabled }),
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      setFocusModeEnabled(!!json.enabled);
+      setFocusModePhase(json.phase || 'idle');
+      setFocusModeEndsAt(json.endsAt || null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setFocusModeLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
@@ -322,6 +381,8 @@ export default function Dashboard({ user, onLogout }) {
 
   const btcValue = typeof data?.assets?.btc === 'number' ? data.assets.btc : Number(data?.assets?.btc || 0);
   const jpyValue = data?.assets?.jpy || 0;
+  const remainSec = focusModeEndsAt ? Math.max(0, Math.floor((focusModeEndsAt - now) / 1000)) : 0;
+  const remainText = `${Math.floor(remainSec / 60)}:${String(remainSec % 60).padStart(2, '0')}`;
 
   return (
     <div className="app-container">
@@ -514,6 +575,59 @@ export default function Dashboard({ user, onLogout }) {
                       <div className="progress-fill" style={{ width: `${completedPercentage}%` }}></div>
                     </div>
                     <p>進捗は {completedPercentage}%。未完了の {remainingTodosCount} 件を順番に片付けて連勝を作ろう。</p>
+                  </section>
+
+                  <section className="glass-card" style={{ marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div className="card-header">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Zap size={18} color="var(--tf-secondary)" />
+                        <h2>集中モード</h2>
+                      </div>
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '3px 10px',
+                        borderRadius: '999px',
+                        background: focusModeEnabled ? '#dcfce7' : '#f1f5f9',
+                        color: focusModeEnabled ? '#16a34a' : '#64748b',
+                      }}>
+                        {focusModeEnabled ? '● ON' : '○ OFF'}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--tf-text-muted)', margin: '0.4rem 0 0.8rem' }}>
+                      {focusModeEnabled
+                        ? (focusModePhase === 'break' ? '🟢 休憩中' : '🔴 集中中（ブラックリストをロック中）')
+                        : 'ONにするとブラックリストのサイトをロックします'}
+                    </p>
+                    {focusModeEnabled && (
+                      <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 1rem', color: 'var(--tf-text)' }}>
+                        {focusModePhase === 'break' ? '休憩終了まで' : '集中終了まで'}: {remainText}
+                      </p>
+                    )}
+                    <button
+                      onClick={handleToggleFocusMode}
+                      disabled={focusModeLoading}
+                      style={{
+                        width: '100%',
+                        padding: '0.6rem',
+                        borderRadius: '10px',
+                        border: 'none',
+                        cursor: focusModeLoading ? 'not-allowed' : 'pointer',
+                        background: focusModeEnabled
+                          ? 'linear-gradient(135deg, #dc2626, #b91c1c)'
+                          : 'linear-gradient(135deg, var(--tf-primary), var(--tf-primary-light))',
+                        color: 'white',
+                        fontWeight: 700,
+                        fontSize: '0.88rem',
+                        opacity: focusModeLoading ? 0.65 : 1,
+                      }}
+                    >
+                      {focusModeLoading
+                        ? '処理中...'
+                        : focusModeEnabled
+                          ? '集中モードをOFFにする'
+                          : '集中モードをONにする'}
+                    </button>
                   </section>
 
                   <section className="glass-card">

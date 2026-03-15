@@ -25,6 +25,7 @@ const {
 } = require('../controllers/calendarEventsController');
 const { postTime } = require('../controllers/timeController');
 const { getDashboard } = require('../controllers/dashboardController');
+const { getFocusMode, setFocusMode } = require('../controllers/focusModeController');
 const authRouter = require('./auth');
 
 const router = express.Router();
@@ -73,5 +74,11 @@ router.post('/time', asyncHandler(postTime));
 
 // ダッシュボード情報の取得
 router.get('/dashboard', asyncHandler(getDashboard));
+
+// 集中モード状態の取得
+router.get('/focus-mode', asyncHandler(getFocusMode));
+
+// 集中モード状態の更新
+router.post('/focus-mode', asyncHandler(setFocusMode));
 
 module.exports = { apiRouter: router };

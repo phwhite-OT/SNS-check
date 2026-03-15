@@ -1,6 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
+
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Time = Asset Dashboard</title>
   <style>
     body {
       width: 300px;
@@ -9,11 +13,13 @@
       background: #111;
       color: #fff;
     }
+
     h2 {
       margin-top: 5px;
       font-size: 16px;
       color: #3b82f6;
     }
+
     .stat-row {
       display: flex;
       justify-content: space-between;
@@ -22,6 +28,7 @@
       background: #222;
       border-radius: 6px;
     }
+
     .btn {
       width: 100%;
       padding: 10px;
@@ -33,17 +40,63 @@
       cursor: pointer;
       font-weight: bold;
     }
+
     .btn:hover {
       background: #2563eb;
     }
+
+    .focus-box {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      background: #1a1a1a;
+    }
+
+    .focus-title {
+      font-size: 12px;
+      color: #93c5fd;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    .focus-status {
+      font-size: 12px;
+      color: #ddd;
+      margin-bottom: 8px;
+    }
+
+    .focus-toggle {
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #3b82f6;
+      background: transparent;
+      color: #93c5fd;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .focus-toggle:hover {
+      background: #1e3a8a;
+    }
   </style>
 </head>
+
 <body>
   <h2>HP & ToDo Tracker</h2>
   <div id="stats">
     Loading...
   </div>
+
+  <div class="focus-box">
+    <div class="focus-title">集中モード</div>
+    <div id="focusStatus" class="focus-status">状態を取得中...</div>
+    <button id="focusToggleBtn" class="focus-toggle">切り替え</button>
+  </div>
+
   <button id="dashboardBtn" class="btn">View Full Dashboard</button>
   <script src="popup.js"></script>
 </body>
+
 </html>
