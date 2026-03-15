@@ -34,26 +34,14 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-const DEFAULT_APP_ORIGIN = 'https://sns-check.onrender.com';
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_BASE ||
+  (process.env.NEXT_PUBLIC_API_URL
+    ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`
+    : '/api')
+).replace(/\/$/, '');
+const FOCUS_MODE_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
-function resolveApiBase() {
-  if (process.env.NEXT_PUBLIC_API_BASE) {
-    return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, '');
-  }
-
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`;
-  }
-
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return '/api';
-    }
-  }
-
-  return `${DEFAULT_APP_ORIGIN}/api`;
-}
 const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 
@@ -63,60 +51,96 @@ function toDueTimestamp(dueDate) {
   return Number.isFinite(ts) ? ts : Number.POSITIVE_INFINITY;
 }
 
+const DEMO_DATA = {
+  todos: [
+    { id: 'd1', title: '【重要】最終レポートの構成作成', completed: false, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: '章立てと参考文献のリストアップ [estimate:120]' },
+    { id: 'd2', title: '英単語ターゲット1900 1-200復習', completed: true, priority: 'medium', dueDate: format(new Date(), 'yyyy-MM-dd'), description: 'アプリで確認 [estimate:30]' },
+    { id: 'd3', title: '数学IIB 演習問題 15-20', completed: false, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: 'Focus Goldを使用 [estimate:90]' },
+    { id: 'd4', title: 'TOEIC公式問題集 パート5', completed: false, priority: 'medium', dueDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'), description: '時間を測って解く [estimate:45]' },
+    { id: 'd5', title: 'サークル勧誘チラシの修正', completed: true, priority: 'low', dueDate: format(subDays(new Date(), 1), 'yyyy-MM-dd'), description: 'QRコードの差し替え [estimate:60]' },
+    { id: 'd6', title: 'バイトのシフト提出', completed: true, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: 'LINEで店長に送信 [estimate:10]' }
+  ],
+  missionProgress: {
+    goals: [3, 5],
+    activeTarget: 5,
+    activeProgress: 60,
+    createdLifetime: 124,
+    completedLifetime: 75,
+    persistence: 'database',
+    byGoal: [
+      { target: 3, progress: 100, achieved: true },
+      { target: 5, progress: 60, achieved: false }
+    ]
+  },
+  blacklist: [
+    { domain: 'youtube.com' },
+    { domain: 'twitter.com' },
+    { domain: 'instagram.com' },
+    { domain: 'tiktok.com' }
+  ],
+  siteBreakdown: [
+    { domain: 'youtube.com', timeSpent: 145, visits: 12 },
+    { domain: 'twitter.com', timeSpent: 82, visits: 24 },
+    { domain: 'instagram.com', timeSpent: 45, visits: 8 },
+    { domain: 'tiktok.com', timeSpent: 30, visits: 5 }
+  ],
+  totalTimeSeconds: 18120, // 約5時間
+  hourlyStats: Array.from({ length: 24 }).map((_, i) => {
+    const hoursAgo = 23 - i;
+    const date = new Date(Date.now() - hoursAgo * 3600 * 1000);
+    date.setMinutes(0, 0, 0);
+    
+    // デモ用のイベント生成: 15分使用 (¥300ロス) で統一し、傾きを一定にする
+    const hasSnsUsage = (i % 3 === 0); // 3時間おきに使用
+    const baseLoss = hasSnsUsage ? 300 : 0;
+    const events = [];
+    if (hasSnsUsage) {
+      const domains = ['youtube.com', 'twitter.com', 'instagram.com', 'tiktok.com'];
+      const randomDomain = domains[i % domains.length];
+      events.push({ type: 'loss', name: randomDomain, jpy: -baseLoss });
+    }
+    if (i === 15) events.push({ type: 'gain', name: '✓ 英単語ターゲット1900 1-200復習', jpy: 600 });
+    if (i === 20) events.push({ type: 'gain', name: '✓ サークル勧誘チラシの修正', jpy: 1200 });
+
+    return {
+      timestamp: date.getTime(),
+      label: `${date.getHours()}:00`,
+      lossJpy: baseLoss,
+      gainJpy: (i === 10 ? 200 : i === 15 ? 600 : i === 20 ? 1200 : 0),
+      events
+    };
+  }).reduce((acc, curr, i) => {
+    const prevLoss = i > 0 ? acc[i - 1].cumulativeLossJpy : 0;
+    const prevNet = i > 0 ? acc[i - 1].netBalance : 0;
+    
+    curr.cumulativeLossJpy = prevLoss + curr.lossJpy;
+    curr.netBalance = prevNet + curr.gainJpy - curr.lossJpy;
+    
+    acc.push(curr);
+    return acc;
+  }, []),
+  assets: {
+    jpy: 6840,
+    btc: 0.00000045,
+    btcPriceJpy: 15200000
+  }
+};
+
+const parseEstimate = (desc) => {
+  const match = desc?.match(/\[estimate:(\d+)\]/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
 function resolveAllTasksFoldHeight(viewportHeight) {
   if (!Number.isFinite(viewportHeight) || viewportHeight <= 0) return 340;
   return Math.max(260, Math.min(420, Math.floor(viewportHeight * 0.42)));
 }
 
-function normalizeDomainInput(rawValue) {
-  const raw = String(rawValue || '').trim().toLowerCase();
-  if (!raw) return '';
-
-  try {
-    const withProtocol = raw.includes('://') ? raw : `https://${raw}`;
-    const url = new URL(withProtocol);
-    const hostname = String(url.hostname || '').trim().toLowerCase();
-    return hostname.replace(/^www\./, '');
-  } catch (_error) {
-    return '';
-  }
-}
-
-function isValidDomainCandidate(domain) {
-  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(String(domain || ''));
-}
-
-function findMatchedBlacklistDomain(domain, blacklistDomains) {
-  const normalized = String(domain || '').trim().toLowerCase();
-  if (!normalized) return null;
-
-  const exact = blacklistDomains.find((item) => item === normalized);
-  if (exact) return exact;
-
-  return blacklistDomains.find((item) => (
-    normalized.endsWith(`.${item}`)
-    || item.endsWith(`.${normalized}`)
-    || item.includes(normalized)
-    || normalized.includes(item)
-  )) || null;
-}
-
 export default function Dashboard({ user, onLogout }) {
-  const apiBase = useMemo(() => resolveApiBase(), []);
-  const extensionAppOrigin = useMemo(() => {
-    if (apiBase === '/api') {
-      if (typeof window !== 'undefined') {
-        return window.location.origin;
-      }
-      return '';
-    }
-
-    return apiBase.replace(/\/api$/, '');
-  }, [apiBase]);
-  const focusModeUserId = user?.id || DEFAULT_USER_ID;
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Layout states
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'calendar', 'analysis'
@@ -129,11 +153,9 @@ export default function Dashboard({ user, onLogout }) {
   const [newTodoTags, setNewTodoTags] = useState('');
   const [newTodoPriority, setNewTodoPriority] = useState('medium');
   const [newTodoDate, setNewTodoDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [newTodoEstimate, setNewTodoEstimate] = useState(''); // 分単位
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isWelcomeBannerVisible, setIsWelcomeBannerVisible] = useState(true);
-  const [newBlacklistDomain, setNewBlacklistDomain] = useState('');
-  const [blacklistBusy, setBlacklistBusy] = useState(false);
-  const [blacklistError, setBlacklistError] = useState('');
 
   // Focus mode states
   const [focusModeEnabled, setFocusModeEnabled] = useState(false);
@@ -167,16 +189,16 @@ export default function Dashboard({ user, onLogout }) {
   const allTasksListRef = useRef(null);
   const allTasksHadOverflowRef = useRef(false);
 
-  // Blacklist states
-  const [blacklistInput, setBlacklistInput] = useState('');
-  const [blacklistActionDomain, setBlacklistActionDomain] = useState(null);
-  const [blacklistError, setBlacklistError] = useState(null);
-
   // Fetch data (with user ID from auth)
   const fetchData = async () => {
+    if (isDemoMode) {
+      setData(DEMO_DATA);
+      setIsLoading(false);
+      return;
+    }
     const requestId = ++latestFetchRequestIdRef.current;
     try {
-      const res = await fetch(`${apiBase}/dashboard`, {
+      const res = await fetch(`${API_BASE}/dashboard`, {
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
         },
@@ -204,7 +226,7 @@ export default function Dashboard({ user, onLogout }) {
       fetchFocusMode();
     }, 5000);
     return () => clearInterval(intervalId);
-  }, [user, apiBase]);
+  }, [user, isDemoMode]);
 
   useEffect(() => {
     const ticker = setInterval(() => setNow(Date.now()), 1000);
@@ -218,7 +240,8 @@ export default function Dashboard({ user, onLogout }) {
     const tagsArray = newTodoTags.split(',').map(tag => tag.trim()).filter(Boolean);
     setIsCreatingTodo(true);
     try {
-      const response = await fetch(`${apiBase}/todos`, {
+      const finalDesc = newTodoEstimate ? `${newTodoDesc} [estimate:${newTodoEstimate}]` : newTodoDesc;
+      const response = await fetch(`${API_BASE}/todos`, {
         method: 'POST',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -227,7 +250,7 @@ export default function Dashboard({ user, onLogout }) {
         body: JSON.stringify({
           title: newTodoTitle,
           dueDate: newTodoDate,
-          description: newTodoDesc,
+          description: finalDesc,
           tags: tagsArray,
           priority: newTodoPriority
         })
@@ -243,6 +266,7 @@ export default function Dashboard({ user, onLogout }) {
       setNewTodoDesc('');
       setNewTodoTags('');
       setNewTodoPriority('medium');
+      setNewTodoEstimate('');
       setIsTaskModalOpen(false);
       fetchData();
     } catch (e) {
@@ -256,12 +280,12 @@ export default function Dashboard({ user, onLogout }) {
   const handleAnalyzeTask = async (taskOrEvent = null) => {
     // taskOrEvent が Event インスタンスなら null 扱いにする（引数なしの onClick で呼ばれた場合）
     const existingTask = (taskOrEvent && taskOrEvent.nativeEvent) ? null : taskOrEvent;
-
+    
     const title = existingTask ? existingTask.title : newTodoTitle;
     const desc = existingTask ? existingTask.description : newTodoDesc;
 
     if (!title || !title.trim() || isAnalyzing) return;
-
+    
     setIsAnalyzing(true);
     setAiResult(null);
     setAiError(null);
@@ -269,9 +293,9 @@ export default function Dashboard({ user, onLogout }) {
     if (existingTask && existingTask.dueDate) {
       setNewTodoDate(existingTask.dueDate);
     }
-
+    
     try {
-      const res = await fetch(`${apiBase}/ai/analyze-task`, {
+      const res = await fetch(`${API_BASE}/ai/analyze-task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, description: desc }),
@@ -282,8 +306,11 @@ export default function Dashboard({ user, onLogout }) {
       }
       const result = await res.json();
       setAiResult(result);
+      if (result.totalEstimatedHours) {
+        setNewTodoEstimate(Math.round(result.totalEstimatedHours * 60));
+      }
       setSelectedSubtasks(new Set(result.subtasks.map((_, i) => i)));
-
+      
       // もし詳細モーダルから実行したなら、分析結果を表示するために
       // UIの状態を調整する必要があるかもしれない（現状は新規タスクモーダルと同じUIパターンを利用）
     } catch (e) {
@@ -304,19 +331,22 @@ export default function Dashboard({ user, onLogout }) {
 
       // 既存タスクの分析でない場合は、まず親となるメインタスクを作成
       if (!parentId) {
-        const parentResponse = await fetch(`${apiBase}/todos`, {
-          method: 'POST',
-          headers: {
-            'x-user-id': user?.id || DEFAULT_USER_ID,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: newTodoTitle,
-            description: newTodoDesc || '[AI分析から生成された親タスク]',
-            priority: newTodoPriority,
-            dueDate: newTodoDate,
-          }),
-        });
+          const parentDesc = newTodoEstimate 
+            ? `${newTodoDesc || '[AI分析から生成された親タスク]'} [estimate:${newTodoEstimate}]`
+            : (newTodoDesc || '[AI分析から生成された親タスク]');
+          const parentResponse = await fetch(`${API_BASE}/todos`, {
+            method: 'POST',
+            headers: {
+              'x-user-id': user?.id || DEFAULT_USER_ID,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              title: newTodoTitle,
+              description: parentDesc,
+              priority: newTodoPriority,
+              dueDate: newTodoDate,
+            }),
+          });
 
         if (!parentResponse.ok) throw new Error('親タスクの作成に失敗しました');
         const parentTask = await parentResponse.json();
@@ -326,13 +356,13 @@ export default function Dashboard({ user, onLogout }) {
       // 2. 選択されたサブタスクを親子紐付け情報を付けて保存
       for (const subtask of toSave) {
         console.log('Adding subtask:', subtask);
-        const response = await fetch(`${apiBase}/todos`, {
+        const response = await fetch(`${API_BASE}/todos`, {
           method: 'POST',
           headers: { 'x-user-id': user?.id || DEFAULT_USER_ID, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: subtask.title,
-            // [parent:ID] プレフィックスを付けることで親子関係を表現
-            description: `[parent:${parentId}] [AI生成] 予想: ${subtask.estimatedHours}h / 優先度: ${subtask.priority}`,
+            // [parent:ID] プレフィックスを付けることで親子関係を表現。 [estimate:X] で報酬計算に対応
+            description: `[parent:${parentId}] [estimate:${Math.round(subtask.estimatedHours * 60)}] [AI生成] 予想: ${subtask.estimatedHours}h / 優先度: ${subtask.priority}`,
             priority: subtask.priority,
             dueDate: newTodoDate,
           }),
@@ -348,6 +378,7 @@ export default function Dashboard({ user, onLogout }) {
       setIsDetailModalOpen(false); // 詳細モーダルからだった場合も閉じる
       setNewTodoTitle('');
       setNewTodoDesc('');
+      setNewTodoEstimate('');
       fetchData();
     } catch (e) {
       console.error('Error in handleSaveSubtasks:', e);
@@ -383,7 +414,7 @@ export default function Dashboard({ user, onLogout }) {
     });
 
     try {
-      const response = await fetch(`${apiBase}/todos/${id}`, {
+      const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'PUT',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -431,7 +462,7 @@ export default function Dashboard({ user, onLogout }) {
     if (!id || deletingTodoId === id) return;
     setDeletingTodoId(id);
     try {
-      const response = await fetch(`${apiBase}/todos/${id}`, {
+      const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
@@ -452,115 +483,23 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
-  const handleAddBlacklist = async (rawDomain) => {
-    const normalized = normalizeDomainInput(rawDomain);
-    if (!isValidDomainCandidate(normalized)) {
-      setBlacklistError('有効なドメインを入力してください（例: youtube.com）。');
-      return;
-    }
-
-    setBlacklistActionDomain(normalized);
-    setBlacklistError(null);
-
-    try {
-      const response = await fetch(`${API_BASE}/blacklist`, {
-        method: 'POST',
-        headers: {
-          'x-user-id': user?.id || DEFAULT_USER_ID,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ domain: normalized }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData?.error || 'ドメイン追加に失敗しました。');
-      }
-
-      setBlacklistInput('');
-      await fetchData();
-    } catch (e) {
-      console.error(e);
-      setBlacklistError(e.message || 'ドメイン追加に失敗しました。');
-    } finally {
-      setBlacklistActionDomain(null);
-    }
-  };
-
   const handleDeleteBlacklist = async (domain) => {
-    const normalized = normalizeDomainInput(domain);
-    if (!isValidDomainCandidate(normalized)) {
-      return;
-    }
-
-    setBlacklistActionDomain(normalized);
-    setBlacklistError(null);
-
     try {
-      const response = await fetch(`${API_BASE}/blacklist/${encodeURIComponent(normalized)}`, {
+      await fetch(`${API_BASE}/blacklist/${domain}`, {
         method: 'DELETE',
         headers: {
           'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData?.error || 'ドメイン削除に失敗しました。');
-      }
-
-      await fetchData();
-    } catch (e) {
-      console.error(e);
-      setBlacklistError(e.message || 'ドメイン削除に失敗しました。');
-    } finally {
-      setBlacklistActionDomain(null);
-        throw new Error('Blacklist delete failed');
-      }
-
       fetchData();
     } catch (e) { console.error(e); }
-    finally {
-      setBlacklistBusy(false);
-    }
-  };
-
-  const handleAddBlacklist = async (event) => {
-    event.preventDefault();
-
-    if (!newBlacklistDomain.trim() || blacklistBusy) return;
-
-    setBlacklistError('');
-    setBlacklistBusy(true);
-    try {
-      const response = await fetch(`${apiBase}/blacklist`, {
-        method: 'POST',
-        headers: {
-          'x-user-id': user?.id || DEFAULT_USER_ID,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ domain: newBlacklistDomain.trim() }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Blacklist create failed');
-      }
-
-      setNewBlacklistDomain('');
-      fetchData();
-    } catch (e) {
-      console.error(e);
-      setBlacklistError('ブラックリストの更新に失敗しました。');
-    } finally {
-      setBlacklistBusy(false);
-    }
   };
 
   const fetchFocusMode = async () => {
     try {
-      const res = await fetch(`${apiBase}/focus-mode`, {
+      const res = await fetch(`${API_BASE}/focus-mode`, {
         headers: {
-          'x-user-id': focusModeUserId,
+          'x-user-id': FOCUS_MODE_USER_ID,
         },
       });
       if (!res.ok) return;
@@ -577,11 +516,11 @@ export default function Dashboard({ user, onLogout }) {
     if (focusModeLoading) return;
     setFocusModeLoading(true);
     try {
-      const res = await fetch(`${apiBase}/focus-mode`, {
+      const res = await fetch(`${API_BASE}/focus-mode`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': focusModeUserId,
+          'x-user-id': FOCUS_MODE_USER_ID,
         },
         body: JSON.stringify({ enabled: !focusModeEnabled }),
       });
@@ -706,14 +645,50 @@ export default function Dashboard({ user, onLogout }) {
     };
   }, [allTodosSorted, activeTab]);
 
+  // Analysis Page Data
+  const siteBreakdown = data?.siteBreakdown || [];
+  const sortedBreakdown = useMemo(() => {
+    return [...siteBreakdown].sort((a, b) => b.timeSpent - a.timeSpent);
+  }, [siteBreakdown]);
+
+  const totalTimeInMinutes = siteBreakdown.reduce((acc, curr) => acc + curr.timeSpent, 0);
+  const totalTimeSeconds = data?.totalTimeSeconds || (totalTimeInMinutes * 60);
+
+  const totalRecoveredJpy = useMemo(() => {
+    return (data?.todos || [])
+      .filter(t => t.completed)
+      .reduce((sum, t) => sum + (parseEstimate(t.description) / 60) * 1200, 0);
+  }, [data?.todos]);
+
+  const assetLossData = useMemo(() => {
+    const stats = (data?.hourlyStats || []);
+    return stats.map((item) => {
+      // バックエンドが netBalance を持っている場合はそれを利用、なければフロントで計算
+      const loss = (item.cumulativeLossJpy || 0);
+      return {
+        ...item,
+        netBalance: item.netBalance !== undefined ? item.netBalance : (totalRecoveredJpy - loss)
+      };
+    });
+  }, [data?.hourlyStats, totalRecoveredJpy]);
+
+  const off = useMemo(() => {
+    if (!assetLossData.length) return 0;
+    const dataMax = Math.max(...assetLossData.map((i) => i.netBalance || 0), 0);
+    const dataMin = Math.min(...assetLossData.map((i) => i.netBalance || 0), 0);
+
+    if (dataMax <= 0) return 0;
+    if (dataMin >= 0) return 1;
+
+    return dataMax / (dataMax - dataMin);
+  }, [assetLossData]);
+
+  const btcValue = typeof data?.assets?.btc === 'number' ? data.assets.btc : Number(data?.assets?.btc || 0);
+  const jpyValue = data?.assets?.jpy || 0;
+
   if (isLoading) return <div className="loading">読み込み中...</div>;
   if (error) return <div className="error-card">{error}</div>;
   if (!data) return null;
-
-  const productivityData = (data?.history || []).map(item => ({
-    time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    score: item.score
-  }));
 
   const getRelativeDateLabel = (dateStr) => {
     if (!dateStr) return null;
@@ -729,7 +704,6 @@ export default function Dashboard({ user, onLogout }) {
     if (target < today) return { label: format(target, 'M/d'), className: 'overdue' };
     return { label: format(target, 'M/d'), className: 'upcoming' };
   };
-
 
   const selectedDateRemainingCount = (data?.todos || []).filter((todo) => todo.dueDate === selectedDate && !todo.completed).length;
   const remainingTodosCount = (data?.todos || []).filter(t => !t.completed).length;
@@ -759,46 +733,22 @@ export default function Dashboard({ user, onLogout }) {
   const primaryGoalAchieved = completedLifetime >= primaryGoal;
   const secondaryGoalAchieved = completedLifetime >= secondaryGoal;
 
-  // Analysis Page Data
-  const siteBreakdown = data?.siteBreakdown || [];
-  const sortedBreakdown = [...siteBreakdown].sort((a, b) => b.timeSpent - a.timeSpent);
-  const totalTimeInMinutes = siteBreakdown.reduce((acc, curr) => acc + curr.timeSpent, 0);
-  const totalTimeBase = Math.max(totalTimeInMinutes, 1);
-  const totalTimeSeconds = data?.totalTimeSeconds || (totalTimeInMinutes * 60);
-  const blacklistDomains = Array.from(new Set(
-    (Array.isArray(data?.blacklist) ? data.blacklist : [])
-      .map((item) => normalizeDomainInput(item?.domain))
-      .filter(Boolean)
-  ));
-  const normalizedBlacklistInput = normalizeDomainInput(blacklistInput);
-  const canSubmitBlacklistInput = isValidDomainCandidate(normalizedBlacklistInput);
-
   const formatTime = (minutes) => {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return h > 0 ? `${h}時間 ${m}分` : `${m}分`;
   };
 
-  const assetLossData = data?.hourlyStats || [];
-
-  const btcValue = typeof data?.assets?.btc === 'number' ? data.assets.btc : Number(data?.assets?.btc || 0);
-  const jpyValue = data?.assets?.jpy || 0;
   const remainSec = focusModeEndsAt ? Math.max(0, Math.floor((focusModeEndsAt - now) / 1000)) : 0;
   const remainText = `${Math.floor(remainSec / 60)}:${String(remainSec % 60).padStart(2, '0')}`;
 
   return (
     <div className="app-container">
-      <div
-        id="extension-sync-data"
-        data-user-id={focusModeUserId}
-        data-api-url={extensionAppOrigin}
-        style={{ display: 'none' }}
-      />
       {/* Sidebar */}
       <aside className="sidebar">
-        <div className="sidebar-logo">
+        <div className="sidebar-logo" onClick={() => setIsDemoMode(!isDemoMode)} style={{ cursor: 'pointer' }}>
           <Clock size={32} />
-          <span>Focus Quest</span>
+          <span>Focus Quest {isDemoMode && <small style={{ fontSize: '0.6rem', opacity: 0.5 }}>(Demo)</small>}</span>
         </div>
 
         <button className="btn-new-task-sidebar mb-2" onClick={() => {
@@ -909,7 +859,7 @@ export default function Dashboard({ user, onLogout }) {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
                                   {hasChildren && (
-                                    <button
+                                    <button 
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setExpandedSubtasks(prev => {
@@ -944,7 +894,7 @@ export default function Dashboard({ user, onLogout }) {
                               </div>
                               <div className="flex gap-2 items-center">
                                 {!todo.completed && (
-                                  <button
+                                  <button 
                                     onClick={(e) => { e.stopPropagation(); handleAnalyzeTask(todo); setIsTaskModalOpen(true); }}
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: '#7c3aed' }}
                                     title="AIでタスク分析"
@@ -1201,113 +1151,6 @@ export default function Dashboard({ user, onLogout }) {
                     </button>
                   </section>
 
-                  <section className="glass-card">
-                    <div className="card-header">
-                      <h2>スコア履歴</h2>
-                    </div>
-                    <div style={{ height: 150 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={productivityData}>
-                          <Line type="monotone" dataKey="score" stroke="var(--tf-primary)" strokeWidth={3} dot={false} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </section>
-
-                  <section className="glass-card" style={{ marginTop: '0.75rem' }}>
-                    <div className="card-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Globe size={18} color="var(--tf-primary)" />
-                        <h2>ブラックリスト管理</h2>
-                      </div>
-                    </div>
-
-                    <form onSubmit={handleAddBlacklist} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.9rem' }}>
-                      <input
-                        type="text"
-                        value={newBlacklistDomain}
-                        onChange={(e) => setNewBlacklistDomain(e.target.value)}
-                        placeholder="例: facebook.com"
-                        disabled={blacklistBusy}
-                        style={{
-                          flex: 1,
-                          height: '40px',
-                          borderRadius: '10px',
-                          border: '1px solid var(--tf-border)',
-                          padding: '0 0.8rem',
-                          fontSize: '0.9rem',
-                        }}
-                      />
-                      <button
-                        type="submit"
-                        disabled={blacklistBusy || !newBlacklistDomain.trim()}
-                        style={{
-                          border: 'none',
-                          borderRadius: '10px',
-                          padding: '0 0.9rem',
-                          fontWeight: 700,
-                          color: '#fff',
-                          background: 'linear-gradient(135deg, var(--tf-primary), var(--tf-primary-light))',
-                          cursor: blacklistBusy ? 'not-allowed' : 'pointer',
-                          opacity: blacklistBusy || !newBlacklistDomain.trim() ? 0.6 : 1,
-                        }}
-                      >
-                        追加
-                      </button>
-                    </form>
-
-                    {blacklistError && (
-                      <p style={{ margin: '0 0 0.8rem', color: '#dc2626', fontSize: '0.82rem', fontWeight: 700 }}>
-                        {blacklistError}
-                      </p>
-                    )}
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                      {(data?.blacklist || []).length > 0 ? (
-                        (data.blacklist || []).map((item) => (
-                          <div
-                            key={item.domain}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: '0.75rem',
-                              padding: '0.7rem 0.8rem',
-                              borderRadius: '12px',
-                              background: 'rgba(255,255,255,0.78)',
-                              border: '1px solid var(--tf-border)',
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 700, fontSize: '0.9rem', overflowWrap: 'anywhere' }}>{item.domain}</div>
-                              <div style={{ fontSize: '0.76rem', color: 'var(--tf-text-muted)' }}>{item.name}</div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteBlacklist(item.domain)}
-                              disabled={blacklistBusy}
-                              style={{
-                                border: '1px solid rgba(220,38,38,0.2)',
-                                background: 'rgba(220,38,38,0.06)',
-                                color: '#b91c1c',
-                                borderRadius: '10px',
-                                padding: '0.45rem 0.7rem',
-                                fontWeight: 700,
-                                cursor: blacklistBusy ? 'not-allowed' : 'pointer',
-                                flexShrink: 0,
-                              }}
-                            >
-                              削除
-                            </button>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="mission-empty-state">
-                          ブラックリストはまだありません。ドメインを追加すると集中モード中にロックされます。
-                        </div>
-                      )}
-                    </div>
-                  </section>
                 </div>
               </div>
             </>
@@ -1316,8 +1159,8 @@ export default function Dashboard({ user, onLogout }) {
           {activeTab === 'analysis' && (
             <div className="analysis-view animate-fade-in">
               <div className="analysis-header mb-2">
-                <h1>集中ログサマリー</h1>
-                <p className="text-muted">SNSの使い方を可視化して、勉強時間を取り戻そう。</p>
+                <h1>集中ログ分析</h1>
+                <p className="text-muted">SNSの使い方を可視化して、本来のミッション（勉強）時間を取り戻そう。</p>
               </div>
 
               <div className="analysis-summary-grid mb-2">
@@ -1328,17 +1171,11 @@ export default function Dashboard({ user, onLogout }) {
                     <span className="trend positive"><TrendingUp size={14} /> 4%</span>
                   </div>
                 </div>
-                <div className="summary-stat-card">
+                 <div className="summary-stat-card">
                   <span className="label">潜在ロス (JPY)</span>
                   <div className="value-group">
                     <span className="value">¥{jpyValue.toLocaleString()}</span>
-                    <span className="trend negative"><TrendingDown size={14} /> 12%</span>
-                  </div>
-                </div>
-                <div className="summary-stat-card">
-                  <span className="label">潜在ロス (BTC)</span>
-                  <div className="value-group">
-                    <span className="value">{btcValue.toFixed(6)} BTC</span>
+                    <span className="trend negative"><TrendingDown size={14} /> 損失</span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
@@ -1352,25 +1189,55 @@ export default function Dashboard({ user, onLogout }) {
               <div className="analysis-main-grid">
                 <section className="glass-card chart-section">
                   <div className="card-header">
-                    <h2>24h Bitcoin Asset Erosion (Cumulative)</h2>
+                    <h2>当日の収支推移 (Net Balance)</h2>
                   </div>
-                  <div style={{ height: 350, marginTop: '1rem' }}>
+                    <div style={{ height: 350, marginTop: '1rem' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={assetLossData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
                         <defs>
-                          <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8} />
-                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.1} />
+                          <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset={off} stopColor="var(--tf-accent-lime)" stopOpacity={1} />
+                            <stop offset={off} stopColor="var(--tf-accent-red)" stopOpacity={1} />
+                          </linearGradient>
+                          <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset={off} stopColor="var(--tf-accent-lime)" stopOpacity={0.4}/>
+                            <stop offset={off} stopColor="var(--tf-accent-red)" stopOpacity={0.4}/>
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                         <XAxis dataKey="label" tick={{ fontSize: 10, fontWeight: 700 }} />
-                        <YAxis tick={{ fontSize: 11 }} label={{ value: 'BTC Lost', angle: -90, position: 'insideLeft', offset: 15 }} />
+                        <YAxis tick={{ fontSize: 11 }} label={{ value: 'Net JPY', angle: -90, position: 'insideLeft', offset: 15 }} />
                         <Tooltip
-                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                          formatter={(value) => [`${value.toFixed(8)} BTC`, 'Cumulative Loss']}
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', padding: '12px' }}
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              const item = payload[0]?.payload;
+                              if (!item) return null;
+                              return (
+                                <div style={{ background: 'white', padding: '12px', borderRadius: '12px', border: '1px solid #f0f0f0', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+                                  <div style={{ fontWeight: 800, marginBottom: '8px', borderBottom: '1px solid #f0f0f0', paddingBottom: '4px' }}>{label} の状況</div>
+                                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: (item.netBalance || 0) >= 0 ? 'var(--tf-accent-lime)' : '#ef4444', marginBottom: '8px' }}>
+                                    収支: ¥{item.netBalance?.toLocaleString()}
+                                  </div>
+                                  {item.events && item.events.length > 0 && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      {item.events.map((ev, idx) => (
+                                        <div key={idx} style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                                          <span style={{ color: '#64748b' }}>{ev.name}</span>
+                                          <span style={{ fontWeight: 700, color: ev.type === 'gain' ? 'var(--tf-accent-lime)' : '#ef4444' }}>
+                                            {ev.jpy > 0 ? '+' : ''}{Math.floor(ev.jpy || 0).toLocaleString()}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
                         />
-                        <Area type="monotone" dataKey="cumulativeLossBtc" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorLoss)" animationDuration={1500} />
+                        <Area type="monotone" dataKey="netBalance" stroke="url(#splitColor)" strokeWidth={4} fillOpacity={1} fill="url(#colorBalance)" animationDuration={1500} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -1380,56 +1247,6 @@ export default function Dashboard({ user, onLogout }) {
                   <div className="card-header" style={{ marginBottom: '1.5rem' }}>
                     <h2>ドメイン詳細</h2>
                   </div>
-                  <div className="domain-manager-box">
-                    <div className="domain-manager-title">規制ドメインを追加/削除</div>
-                    <div className="domain-manager-form">
-                      <input
-                        type="text"
-                        className="domain-manager-input"
-                        placeholder="例: youtube.com または https://youtube.com/watch"
-                        value={blacklistInput}
-                        onChange={(e) => setBlacklistInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (canSubmitBlacklistInput && !blacklistActionDomain) {
-                              handleAddBlacklist(blacklistInput);
-                            }
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="btn-domain-add"
-                        disabled={!canSubmitBlacklistInput || !!blacklistActionDomain}
-                        onClick={() => handleAddBlacklist(blacklistInput)}
-                      >
-                        {blacklistActionDomain === normalizedBlacklistInput ? '追加中...' : '追加'}
-                      </button>
-                    </div>
-                    {blacklistError && <p className="domain-manager-error">{blacklistError}</p>}
-
-                    <div className="blacklist-chip-wrap">
-                      {blacklistDomains.length === 0 ? (
-                        <span className="blacklist-empty">現在、規制ドメインはありません。</span>
-                      ) : (
-                        blacklistDomains.map((domain) => (
-                          <button
-                            key={domain}
-                            type="button"
-                            className="blacklist-chip"
-                            disabled={blacklistActionDomain === domain}
-                            onClick={() => handleDeleteBlacklist(domain)}
-                            title="クリックで解除"
-                          >
-                            <span>{domain}</span>
-                            <X size={12} />
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
                   <div className="domain-table-container">
                     <table className="domain-table">
                       <thead>
@@ -1441,13 +1258,7 @@ export default function Dashboard({ user, onLogout }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedBreakdown.map((site) => {
-                          const normalizedSiteDomain = normalizeDomainInput(site.domain);
-                          const matchedBlacklistDomain = findMatchedBlacklistDomain(normalizedSiteDomain, blacklistDomains);
-                          const isBlacklisted = Boolean(matchedBlacklistDomain);
-                          const rowSharePercent = Math.round((site.timeSpent / totalTimeBase) * 100);
-
-                          return (
+                        {sortedBreakdown.map((site) => (
                           <tr key={site.domain}>
                             <td>
                               <div className="domain-cell-main">
@@ -1461,46 +1272,18 @@ export default function Dashboard({ user, onLogout }) {
                             <td>
                               <div className="percentage-container">
                                 <div className="percentage-bar">
-                                  <div className="percentage-fill" style={{ width: `${rowSharePercent}%` }}></div>
+                                  <div className="percentage-fill" style={{ width: `${Math.round((site.timeSpent / totalTimeInMinutes) * 100)}%` }}></div>
                                 </div>
-                                <span className="percentage-text">{rowSharePercent}%</span>
+                                <span className="percentage-text">{Math.round((site.timeSpent / totalTimeInMinutes) * 100)}%</span>
                               </div>
                             </td>
                             <td>
-                              <div className="domain-action-group">
-                                <button className="btn-domain-action" onClick={() => window.open(`https://${site.domain}`, '_blank')}>
-                                  <ExternalLink size={14} />
-                                </button>
-                                {isBlacklisted ? (
-                                  <button
-                                    type="button"
-                                    className="btn-domain-manage remove"
-                                    disabled={blacklistActionDomain === matchedBlacklistDomain}
-                                    onClick={() => handleDeleteBlacklist(matchedBlacklistDomain)}
-                                  >
-                                    解除
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="btn-domain-manage add"
-                                    disabled={!isValidDomainCandidate(normalizedSiteDomain) || !!blacklistActionDomain}
-                                    onClick={() => {
-                                      if (!isValidDomainCandidate(normalizedSiteDomain)) {
-                                        setBlacklistError('この行は集計ラベルのため直接追加できません。上の入力欄からURLを追加してください。');
-                                        return;
-                                      }
-                                      handleAddBlacklist(normalizedSiteDomain);
-                                    }}
-                                  >
-                                    追加
-                                  </button>
-                                )}
-                              </div>
+                              <button className="btn-domain-action" onClick={() => window.open(`https://${site.domain}`, '_blank')}>
+                                <ExternalLink size={14} />
+                              </button>
                             </td>
                           </tr>
-                          );
-                        })}
+                        ))}
                       </tbody>
                     </table>
                   </div>
@@ -1606,9 +1389,25 @@ export default function Dashboard({ user, onLogout }) {
                   </select>
                 </div>
               </div>
-              <div className="form-group">
-                <label>タグ (カンマ区切り)</label>
-                <input type="text" value={newTodoTags} onChange={(e) => setNewTodoTags(e.target.value)} placeholder="仕事, UI, バグ" disabled={isCreatingTodo} />
+              <div className="form-row">
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label>所要時間見積もり (分)</label>
+                  <input 
+                    type="number" 
+                    value={newTodoEstimate} 
+                    onChange={(e) => setNewTodoEstimate(e.target.value)} 
+                    placeholder="例: 60 (1時間)" 
+                    disabled={isCreatingTodo} 
+                    min="0"
+                  />
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                    ¥{Math.floor((Number(newTodoEstimate || 0) / 60) * 1200).toLocaleString()} 相当の価値
+                  </div>
+                </div>
+                <div className="form-group" style={{ flex: 2 }}>
+                  <label>タグ (カンマ区切り)</label>
+                  <input type="text" value={newTodoTags} onChange={(e) => setNewTodoTags(e.target.value)} placeholder="仕事, UI, バグ" disabled={isCreatingTodo} />
+                </div>
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn-cancel" onClick={() => setIsTaskModalOpen(false)} disabled={isCreatingTodo}>キャンセル</button>
@@ -1755,7 +1554,7 @@ export default function Dashboard({ user, onLogout }) {
                     setIsDetailModalOpen(false);
                   }}
                 >
-                  {togglingTodoMap[viewingTask.id]
+                   {togglingTodoMap[viewingTask.id]
                     ? '更新中...'
                     : (viewingTask.completed ? '未完了に戻す' : '完了にする')}
                 </button>
@@ -1880,11 +1679,16 @@ export default function Dashboard({ user, onLogout }) {
             height: 70px;
           }
         }
-        .analysis-view {
-          padding-bottom: 2rem;
+        .analysis-view,
+        .detailed-calendar {
+          padding: 0 1.6rem 2rem;
+        }
+        .analysis-header {
+          margin-top: 1.25rem;
+          margin-bottom: 1.5rem;
         }
         .analysis-header h1 {
-          font-size: 1.75rem;
+          font-size: 1.6rem;
           font-weight: 800;
           color: var(--tf-text);
           margin-bottom: 0.25rem;
@@ -1938,89 +1742,6 @@ export default function Dashboard({ user, onLogout }) {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 1.5rem;
-        }
-
-        .domain-manager-box {
-          border: 1px solid var(--tf-border);
-          background: rgba(255, 255, 255, 0.75);
-          border-radius: 12px;
-          padding: 0.85rem;
-          margin-bottom: 1rem;
-        }
-        .domain-manager-title {
-          font-size: 0.78rem;
-          font-weight: 800;
-          color: var(--tf-text-muted);
-          margin-bottom: 0.5rem;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-        }
-        .domain-manager-form {
-          display: flex;
-          gap: 0.5rem;
-          align-items: center;
-        }
-        .domain-manager-input {
-          flex: 1;
-          border: 1px solid var(--tf-border);
-          border-radius: 9px;
-          padding: 0.56rem 0.7rem;
-          font-size: 0.82rem;
-          color: var(--tf-text);
-          background: white;
-        }
-        .domain-manager-input:focus {
-          outline: 2px solid rgba(14, 116, 144, 0.2);
-          border-color: rgba(14, 116, 144, 0.4);
-        }
-        .btn-domain-add {
-          border: none;
-          border-radius: 9px;
-          padding: 0.58rem 0.9rem;
-          font-size: 0.78rem;
-          font-weight: 800;
-          color: white;
-          background: linear-gradient(135deg, #0ea5e9, #2563eb);
-          cursor: pointer;
-          white-space: nowrap;
-        }
-        .btn-domain-add:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-        .domain-manager-error {
-          margin: 0.55rem 0 0;
-          color: #dc2626;
-          font-size: 0.74rem;
-          font-weight: 600;
-        }
-        .blacklist-chip-wrap {
-          margin-top: 0.65rem;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.45rem;
-        }
-        .blacklist-chip {
-          border: 1px solid rgba(2, 132, 199, 0.26);
-          background: rgba(2, 132, 199, 0.08);
-          color: #075985;
-          border-radius: 999px;
-          padding: 0.24rem 0.56rem;
-          font-size: 0.72rem;
-          font-weight: 700;
-          display: inline-flex;
-          align-items: center;
-          gap: 0.35rem;
-          cursor: pointer;
-        }
-        .blacklist-chip:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-        .blacklist-empty {
-          color: var(--tf-text-muted);
-          font-size: 0.76rem;
-          font-weight: 600;
         }
 
         .domain-table {
@@ -2098,35 +1819,6 @@ export default function Dashboard({ user, onLogout }) {
           background: rgba(15, 118, 110, 0.2);
           color: var(--tf-primary);
         }
-        .domain-action-group {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 0.45rem;
-        }
-        .btn-domain-manage {
-          border: 1px solid transparent;
-          border-radius: 8px;
-          padding: 0.33rem 0.56rem;
-          font-size: 0.7rem;
-          font-weight: 800;
-          cursor: pointer;
-          min-width: 42px;
-        }
-        .btn-domain-manage.add {
-          border-color: rgba(14, 116, 144, 0.28);
-          background: rgba(14, 116, 144, 0.1);
-          color: #0c4a6e;
-        }
-        .btn-domain-manage.remove {
-          border-color: rgba(220, 38, 38, 0.28);
-          background: rgba(220, 38, 38, 0.1);
-          color: #991b1b;
-        }
-        .btn-domain-manage:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
         .animate-fade-in {
           animation: fadeIn 0.4s ease-out;
         }
@@ -2135,6 +1827,12 @@ export default function Dashboard({ user, onLogout }) {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+      <div 
+        id="extension-sync-data" 
+        data-user-id={user?.id} 
+        data-api-url={API_BASE.startsWith('http') ? API_BASE : (typeof window !== 'undefined' ? window.location.origin + API_BASE : '')} 
+        style={{ display: 'none' }}
+      ></div>
     </div>
   );
 }

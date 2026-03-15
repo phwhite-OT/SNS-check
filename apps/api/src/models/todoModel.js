@@ -26,7 +26,8 @@ function mapTodoRowToResponse(row) {
         priority: REVERSE_PRIORITY_MAP[row.priority] || 'medium',
         dueDate: row.due_date || null,
         completed: row.status === 'done',
-        createdAt: row.created_at
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     };
 }
 

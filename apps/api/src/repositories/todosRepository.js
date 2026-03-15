@@ -12,7 +12,7 @@ const { supabase } = require('../config/supabase');
 async function listTodosByUser(userId) {
     const { data, error } = await supabase
         .from('todos')
-        .select('id, title, status, created_at, description, priority, due_date')
+        .select('id, title, status, created_at, updated_at, description, priority, due_date')
         .eq('user_id', userId)
         .order('created_at', { ascending: true });
 
@@ -34,7 +34,7 @@ async function createTodo(userId, todoData) {
             due_date: due_date || null,
             status: status || 'todo',
         })
-        .select('id, title, status, created_at, description, priority, due_date')
+        .select('id, title, status, created_at, updated_at, description, priority, due_date')
         .single();
 
     if (error) throw error;
@@ -46,7 +46,7 @@ async function createTodo(userId, todoData) {
 async function findTodoById(userId, id) {
     const { data, error } = await supabase
         .from('todos')
-        .select('id, title, status, created_at, description, priority, due_date')
+        .select('id, title, status, created_at, updated_at, description, priority, due_date')
         .eq('user_id', userId)
         .eq('id', id)
         .maybeSingle();
