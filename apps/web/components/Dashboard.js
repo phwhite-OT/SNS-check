@@ -2,14 +2,13 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area
 } from 'recharts';
 import {
   Calendar as CalendarIcon,
   CheckCircle,
   Clock,
   Zap,
-  Search,
   Plus,
   ChevronLeft,
   ChevronRight,
@@ -17,17 +16,14 @@ import {
   Home as HomeIcon,
   Trash2,
   X,
-  Bell,
-  Settings,
   MoreVertical,
   Globe,
-  Mail,
   FileText,
-  Link as LinkIcon,
   BarChart3,
   TrendingDown,
   TrendingUp,
   ExternalLink,
+
   LogOut,
   LoaderCircle
 } from 'lucide-react';
@@ -380,8 +376,8 @@ export default function Dashboard({ user, onLogout }) {
 
       // 2. 選択されたサブタスクを親子紐付け情報を付けて保存
       for (const subtask of toSave) {
-        console.log('Adding subtask:', subtask);
         const response = await fetch(`${API_BASE}/todos`, {
+
           method: 'POST',
           headers: { 'x-user-id': user?.id || DEFAULT_USER_ID, 'Content-Type': 'application/json' },
           body: JSON.stringify({
