@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area
 } from 'recharts';
 import {
   Calendar as CalendarIcon,
@@ -40,6 +40,8 @@ const API_BASE = (
     : '/api')
 ).replace(/\/$/, '');
 
+const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
+
 export default function Dashboard({ user, onLogout }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +77,7 @@ export default function Dashboard({ user, onLogout }) {
     try {
       const res = await fetch(`${API_BASE}/dashboard`, {
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
       if (!res.ok) throw new Error('API request failed');
@@ -109,7 +111,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos`, {
         method: 'POST',
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -169,7 +171,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'PUT',
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ completed: nextCompleted })
@@ -217,7 +219,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`${API_BASE}/todos/${id}`, {
         method: 'DELETE',
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
 
@@ -240,7 +242,7 @@ export default function Dashboard({ user, onLogout }) {
       await fetch(`${API_BASE}/blacklist/${domain}`, {
         method: 'DELETE',
         headers: {
-          'x-user-id': user?.id || '00000000-0000-0000-0000-000000000000',
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
       fetchData();
@@ -274,7 +276,7 @@ export default function Dashboard({ user, onLogout }) {
   if (error) return <div className="error-card">{error}</div>;
   if (!data) return null;
 
-  const chartData = data.history.map(item => ({
+  const productivityData = data.history.map(item => ({
     time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     score: item.score
   }));
@@ -347,10 +349,7 @@ export default function Dashboard({ user, onLogout }) {
     return h > 0 ? `${h}時間 ${m}分` : `${m}分`;
   };
 
-  const barChartData = sortedBreakdown.slice(0, 7).map(site => ({
-    name: site.domain,
-    minutes: site.timeSpent
-  }));
+  const assetLossData = data?.hourlyStats || [];
 
   const btcValue = typeof data?.assets?.btc === 'number' ? data.assets.btc : Number(data?.assets?.btc || 0);
   const jpyValue = data?.assets?.jpy || 0;
@@ -570,7 +569,7 @@ export default function Dashboard({ user, onLogout }) {
                     </div>
                     <div style={{ height: 150 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
+                        <LineChart data={productivityData}>
                           <Line type="monotone" dataKey="score" stroke="var(--tf-primary)" strokeWidth={3} dot={false} />
                         </LineChart>
                       </ResponsiveContainer>
@@ -620,24 +619,26 @@ export default function Dashboard({ user, onLogout }) {
               <div className="analysis-main-grid">
                 <section className="glass-card chart-section">
                   <div className="card-header">
-                    <h2>ドメイン別の滞在時間</h2>
+                    <h2>24h Bitcoin Asset Erosion (Cumulative)</h2>
                   </div>
-                  <div style={{ height: 350, marginTop: '1rem' }}>
+                    <div style={{ height: 350, marginTop: '1rem' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={barChartData} layout="vertical" margin={{ left: 20, right: 30 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(148, 163, 184, 0.32)" />
-                        <XAxis type="number" hide />
-                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                      <AreaChart data={assetLossData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+                        <defs>
+                          <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fontWeight: 700 }} />
+                        <YAxis tick={{ fontSize: 11 }} label={{ value: 'BTC Lost', angle: -90, position: 'insideLeft', offset: 15 }} />
                         <Tooltip
                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                          formatter={(value) => [`${value} 分`, '滞在時間']}
+                          formatter={(value) => [`${value.toFixed(8)} BTC`, 'Cumulative Loss']}
                         />
-                        <Bar dataKey="minutes" radius={[0, 4, 4, 0]} barSize={24}>
-                          {barChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={index === 0 ? '#0f766e' : '#9ecfc6'} />
-                          ))}
-                        </Bar>
-                      </BarChart>
+                        <Area type="monotone" dataKey="cumulativeLossBtc" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorLoss)" animationDuration={1500} />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 </section>

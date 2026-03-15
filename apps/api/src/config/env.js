@@ -6,7 +6,10 @@
  * 新しい設定を追加するときは、まずこのファイルに項目を追加する。
  */
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+require('dotenv').config({ 
+    path: path.resolve(__dirname, '../../.env'),
+    override: true 
+});
 
 const env = {
     SUPABASE_URL: process.env.SUPABASE_URL || '',
