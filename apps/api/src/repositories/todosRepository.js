@@ -42,6 +42,20 @@ async function createTodo(userId, todoData) {
 }
 
 
+// IDでTODOを取得
+async function findTodoById(userId, id) {
+    const { data, error } = await supabase
+        .from('todos')
+        .select('id, title, status, created_at, description, priority, due_date')
+        .eq('user_id', userId)
+        .eq('id', id)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data || null;
+}
+
+
 
 // TODOを更新
 async function updateTodo(userId, id, update) {
@@ -71,6 +85,7 @@ async function deleteTodo(userId, id) {
 module.exports = {
     listTodosByUser,
     createTodo,
+    findTodoById,
     updateTodo,
     deleteTodo,
 };

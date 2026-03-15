@@ -8,6 +8,14 @@ const todosRepository = require('../repositories/todosRepository');
 const profilesRepository = require('../repositories/profilesRepository');
 const { mapTodoRowToResponse, mapTodoPatchToUpdate } = require('../models/todoModel');
 
+async function trackTodoProgressSafely(userId, options) {
+    try {
+        await profilesRepository.incrementTodoProgress(userId, options);
+    } catch (error) {
+        console.error('Failed to update todo progress stats:', error?.message || error);
+    }
+}
+
 // ユーザーのTodo一覧を取得
 async function getTodos(userId) {
     const rows = await todosRepository.listTodosByUser(userId);
@@ -31,6 +39,14 @@ async function addTodo(userId, todoData) {
     });
 
     const row = await todosRepository.createTodo(userId, updatePayload);
+
+    await trackTodoProgressSafely(userId, {
+        createdDelta: 1,
+        completedDelta: row.status === 'done' ? 1 : 0,
+        minimumCreated: 1,
+        minimumCompleted: row.status === 'done' ? 1 : 0,
+    });
+
     return mapTodoRowToResponse(row);
 }
 
@@ -41,7 +57,22 @@ async function editTodo(userId, id, patch) {
         throw httpError(400, 'No update fields provided');
     }
 
+    const existing = await todosRepository.findTodoById(userId, id);
+    if (!existing) {
+        throw httpError(404, 'Todo not found');
+    }
+
     const row = await todosRepository.updateTodo(userId, id, update);
+
+    const didCompleteNow = existing.status !== 'done' && row.status === 'done';
+    if (didCompleteNow) {
+        await trackTodoProgressSafely(userId, {
+            completedDelta: 1,
+            minimumCreated: 1,
+            minimumCompleted: 1,
+        });
+    }
+
     return mapTodoRowToResponse(row);
 }
 

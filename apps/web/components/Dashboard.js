@@ -294,16 +294,46 @@ export default function Dashboard({ user, onLogout }) {
     return { label: format(target, 'M/d'), className: 'upcoming' };
   };
 
-  // 全てのタスクを表示。未完了を優先し、期限日でソート
-  const filteredTodos = [...data.todos].sort((a, b) => {
-    if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    if (!a.dueDate && !b.dueDate) return 0;
-    if (!a.dueDate) return 1;
-    if (!b.dueDate) return -1;
-    return new Date(a.dueDate) - new Date(b.dueDate);
-  });
+  // mini-calendar で選択した日付のタスクのみを表示し、未完了と優先度を上位に並べる
+  const filteredTodos = data.todos
+    .filter((todo) => todo.dueDate === selectedDate)
+    .sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+
+      const priorityRank = { high: 0, medium: 1, low: 2 };
+      const aPriority = priorityRank[a.priority] ?? 3;
+      const bPriority = priorityRank[b.priority] ?? 3;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+
+      return (a.title || '').localeCompare(b.title || '', 'ja');
+    });
+  const selectedDateRemainingCount = filteredTodos.filter((todo) => !todo.completed).length;
   const remainingTodosCount = data.todos.filter(t => !t.completed).length;
-  const completedPercentage = data.todos.length > 0 ? Math.round((data.todos.filter(t => t.completed).length / data.todos.length) * 100) : 0;
+
+  const missionProgress = data?.missionProgress || {};
+  const goalTargets = Array.isArray(missionProgress.goals) && missionProgress.goals.length > 0
+    ? missionProgress.goals
+    : [3, 5];
+  const primaryGoal = goalTargets[0] || 3;
+  const secondaryGoal = goalTargets[1] || 5;
+
+  const fallbackCompletedLifetime = data.todos.filter((todo) => todo.completed).length;
+  const completedLifetime = Number.isFinite(missionProgress.completedLifetime)
+    ? missionProgress.completedLifetime
+    : fallbackCompletedLifetime;
+  const createdLifetime = Number.isFinite(missionProgress.createdLifetime)
+    ? missionProgress.createdLifetime
+    : Math.max(data.todos.length, completedLifetime);
+
+  const activeTarget = Number.isFinite(missionProgress.activeTarget)
+    ? missionProgress.activeTarget
+    : (completedLifetime < primaryGoal ? primaryGoal : secondaryGoal);
+  const activeProgress = Number.isFinite(missionProgress.activeProgress)
+    ? missionProgress.activeProgress
+    : Math.min(100, Math.round((completedLifetime / Math.max(activeTarget, 1)) * 100));
+
+  const primaryGoalAchieved = completedLifetime >= primaryGoal;
+  const secondaryGoalAchieved = completedLifetime >= secondaryGoal;
 
   // Analysis Page Data
   const siteBreakdown = data?.siteBreakdown || [];
@@ -403,9 +433,14 @@ export default function Dashboard({ user, onLogout }) {
                         <div className="task-card-icon">
                           <FileText size={18} />
                         </div>
-                        <h2>ミッション一覧</h2>
+                        <h2>{format(new Date(`${selectedDate}T00:00:00`), 'M月 d日', { locale: ja })} のミッション</h2>
                       </div>
-                      <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>{format(new Date(selectedDate), 'yyyy年 M月 d日', { locale: ja })}</span>
+                      <div className="mission-head-right">
+                        <span className="mission-count-pill">残り {selectedDateRemainingCount} 件</span>
+                        <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                          {format(new Date(`${selectedDate}T00:00:00`), 'yyyy年 M月 d日 (E)', { locale: ja })}
+                        </span>
+                      </div>
                     </div>
 
                     <ul className="todo-list">
@@ -456,10 +491,14 @@ export default function Dashboard({ user, onLogout }) {
                           </div>
                         </li>
                       ))}
-                      {filteredTodos.length === 0 && <li className="text-muted text-center py-4">この日のタスクはありません。</li>}
+                      {filteredTodos.length === 0 && (
+                        <li className="mission-empty-state">
+                          この日はまだミッションがありません。右のカレンダーで別日を選ぶか、この日に新規タスクを追加しましょう。
+                        </li>
+                      )}
                       <div className="mt-2 text-center">
                         <button className="add-task-inline" onClick={() => setIsTaskModalOpen(true)}>
-                          <Plus size={16} /> タスクを追加
+                          <Plus size={16} /> この日にタスクを追加
                         </button>
                       </div>
                     </ul>
@@ -510,12 +549,19 @@ export default function Dashboard({ user, onLogout }) {
                   <section className="score-summary-card">
                     <div className="score-summary-head">
                       <Target size={20} />
-                      <h2>今週の達成ゲージ</h2>
+                      <h2>固定目標チャレンジ</h2>
+                    </div>
+                    <div className="score-goal-chip-wrap">
+                      <span className={`goal-chip ${primaryGoalAchieved ? 'done' : ''}`}>{primaryGoal}件クリア</span>
+                      <span className={`goal-chip ${secondaryGoalAchieved ? 'done' : ''}`}>{secondaryGoal}件クリア</span>
                     </div>
                     <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: `${completedPercentage}%` }}></div>
+                      <div className="progress-fill" style={{ width: `${activeProgress}%` }}></div>
                     </div>
-                    <p>進捗は {completedPercentage}%。未完了の {remainingTodosCount} 件を順番に片付けて連勝を作ろう。</p>
+                    <p>
+                      次の目標は {activeTarget} 件クリア。進捗は {activeProgress}%。
+                      累計クリア {completedLifetime} 件 / 累計作成 {createdLifetime} 件で行動を評価します。
+                    </p>
                   </section>
 
                   <section className="glass-card">

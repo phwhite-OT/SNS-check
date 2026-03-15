@@ -756,6 +756,33 @@ h3,
   font-size: 1.15rem;
 }
 
+.mission-head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+}
+
+.mission-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  min-height: 22px;
+  padding: 0 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(120deg, #0f766e, #22c55e);
+}
+
+.mission-filter-hint {
+  margin: -0.25rem 0 0.9rem;
+  font-size: 0.77rem;
+  color: var(--tf-text-muted);
+  font-weight: 600;
+}
+
 .task-card-icon {
   background: rgba(15, 118, 110, 0.15);
   color: var(--tf-primary);
@@ -855,6 +882,18 @@ h3,
 
 .add-task-inline:hover {
   color: var(--tf-primary);
+}
+
+.mission-empty-state {
+  text-align: center;
+  border-radius: 12px;
+  border: 1px dashed rgba(15, 118, 110, 0.35);
+  background: rgba(15, 118, 110, 0.06);
+  color: var(--tf-text-muted);
+  line-height: 1.6;
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 1rem 0.9rem;
 }
 
 .tag {
@@ -1032,6 +1071,32 @@ h3,
 .score-summary-head h2 {
   margin: 0;
   font-size: 1rem;
+}
+
+.score-goal-chip-wrap {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.goal-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  min-height: 24px;
+  padding: 0 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--tf-text-soft);
+  background: rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.goal-chip.done {
+  color: #fff;
+  border-color: rgba(15, 118, 110, 0.55);
+  background: linear-gradient(120deg, var(--tf-primary), #22c55e);
 }
 
 .score-summary-card p {
@@ -1446,8 +1511,21 @@ h3,
     padding: 0 1rem 1.2rem;
   }
 
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mission-head-right {
+    align-items: flex-start;
+  }
+
   .detailed-calendar {
     padding: 1rem;
+  }
+
+  .score-goal-chip-wrap {
+    flex-wrap: wrap;
   }
 
   .full-calendar-grid {

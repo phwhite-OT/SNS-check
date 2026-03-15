@@ -3,6 +3,53 @@
  */
 const { supabase } = require('../config/supabase');
 
+// スキーマ未適用環境でもスコア計算が壊れないように、メモリフォールバックを用意する
+const todoProgressMemory = new Map();
+
+function toSafeCounter(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) return 0;
+    return Math.floor(parsed);
+}
+
+function readMemoryTodoProgress(userId) {
+    return todoProgressMemory.get(userId) || {
+        createdCount: 0,
+        completedCount: 0,
+    };
+}
+
+function writeMemoryTodoProgress(userId, createdCount, completedCount) {
+    const safeCreated = toSafeCounter(createdCount);
+    const safeCompleted = Math.min(toSafeCounter(completedCount), safeCreated);
+    const safe = {
+        createdCount: safeCreated,
+        completedCount: safeCompleted,
+    };
+    todoProgressMemory.set(userId, safe);
+    return safe;
+}
+
+function isMissingTodoStatsColumns(error) {
+    if (!error) return false;
+
+    const code = String(error.code || '');
+    const message = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`.toLowerCase();
+
+    return (
+        code === '42703' || // undefined_column
+        code === 'PGRST204' || // missing column in PostgREST schema cache
+        message.includes('todo_created_count') ||
+        message.includes('todo_completed_count')
+    );
+}
+
+function normalizeTodoProgress(row) {
+    const createdCount = toSafeCounter(row?.todo_created_count);
+    const completedCount = Math.min(toSafeCounter(row?.todo_completed_count), createdCount);
+    return { createdCount, completedCount };
+}
+
 async function getProfileById(userId) {
     const { data, error } = await supabase
         .from('profiles')
@@ -54,7 +101,128 @@ async function ensureProfile(userId) {
     return true;
 }
 
+// 累計の「作成数」「完了数」を取得する（必要に応じて最低値へ補正）
+async function getTodoProgressStats(userId, options = {}) {
+    const minimumCreated = toSafeCounter(options.minimumCreated);
+    const minimumCompleted = toSafeCounter(options.minimumCompleted);
+
+    try {
+        await ensureProfile(userId);
+
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id, todo_created_count, todo_completed_count')
+            .eq('id', userId)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // プロフィール未作成時はメモリフォールバックで返す
+                const memory = readMemoryTodoProgress(userId);
+                const nextCreated = Math.max(memory.createdCount, minimumCreated, minimumCompleted);
+                const nextCompleted = Math.max(memory.completedCount, minimumCompleted);
+                return {
+                    ...writeMemoryTodoProgress(userId, nextCreated, nextCompleted),
+                    persistence: 'memory',
+                };
+            }
+            throw error;
+        }
+
+        const fromDb = normalizeTodoProgress(data);
+        const nextCreated = Math.max(fromDb.createdCount, minimumCreated, minimumCompleted);
+        const nextCompleted = Math.max(fromDb.completedCount, minimumCompleted);
+
+        if (nextCreated !== fromDb.createdCount || nextCompleted !== fromDb.completedCount) {
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({
+                    todo_created_count: Math.max(nextCreated, nextCompleted),
+                    todo_completed_count: Math.min(nextCompleted, Math.max(nextCreated, nextCompleted)),
+                })
+                .eq('id', userId);
+
+            if (updateError) throw updateError;
+        }
+
+        return {
+            ...writeMemoryTodoProgress(userId, nextCreated, nextCompleted),
+            persistence: 'database',
+        };
+    } catch (error) {
+        if (!isMissingTodoStatsColumns(error)) {
+            throw error;
+        }
+
+        // カラム未追加環境はメモリで単調増加を維持
+        const memory = readMemoryTodoProgress(userId);
+        const nextCreated = Math.max(memory.createdCount, minimumCreated, minimumCompleted);
+        const nextCompleted = Math.max(memory.completedCount, minimumCompleted);
+
+        return {
+            ...writeMemoryTodoProgress(userId, nextCreated, nextCompleted),
+            persistence: 'memory',
+        };
+    }
+}
+
+// 累計作成数/完了数を増加させる（減算は行わない）
+async function incrementTodoProgress(userId, options = {}) {
+    const createdDelta = toSafeCounter(options.createdDelta);
+    const completedDelta = toSafeCounter(options.completedDelta);
+    const minimumCreated = toSafeCounter(options.minimumCreated);
+    const minimumCompleted = toSafeCounter(options.minimumCompleted);
+
+    const current = await getTodoProgressStats(userId, {
+        minimumCreated,
+        minimumCompleted,
+    });
+
+    const nextCreated = Math.max(
+        current.createdCount + createdDelta,
+        minimumCreated,
+        minimumCompleted
+    );
+    const nextCompleted = Math.max(
+        current.completedCount + completedDelta,
+        minimumCompleted
+    );
+
+    if (current.persistence === 'database') {
+        try {
+            const createdForStore = Math.max(nextCreated, nextCompleted);
+            const completedForStore = Math.min(nextCompleted, createdForStore);
+
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    todo_created_count: createdForStore,
+                    todo_completed_count: completedForStore,
+                })
+                .eq('id', userId);
+
+            if (error) throw error;
+
+            return {
+                ...writeMemoryTodoProgress(userId, createdForStore, completedForStore),
+                persistence: 'database',
+            };
+        } catch (error) {
+            if (!isMissingTodoStatsColumns(error)) {
+                throw error;
+            }
+        }
+    }
+
+    return {
+        ...writeMemoryTodoProgress(userId, nextCreated, nextCompleted),
+        persistence: 'memory',
+    };
+}
+
 module.exports = {
     getProfileById,
     ensureProfile,
+    getTodoProgressStats,
+    incrementTodoProgress,
 };

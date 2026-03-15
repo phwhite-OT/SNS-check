@@ -8,7 +8,7 @@
 
 | # | テーブル名 | 目的 | 役割 | 主なカラム（抜粋） |
 |---|---|---|---|---|
-| 1 | `profiles` | ユーザー追加情報・設定管理 | `auth.users` を補完するプロフィール基盤 | `id (uuid, PK, auth.users.id)` / `display_name (text)` / `timezone (text)` / `created_at (timestamptz)` |
+| 1 | `profiles` | ユーザー追加情報・設定管理 | `auth.users` を補完するプロフィール基盤 | `id (uuid, PK, auth.users.id)` / `display_name (text)` / `timezone (text)` / `todo_created_count (int)` / `todo_completed_count (int)` / `created_at (timestamptz)` |
 | 2 | `todos` | Todo管理 | タスク保存、進捗・優先度管理の中核データ | `id (uuid, PK)` / `user_id (uuid, FK)` / `title (text)` / `description (text)` / `due_date (date)` / `status (todo/doing/done)` / `priority (smallint)` / `created_at` / `updated_at` |
 | 3 | `calendar_events` | カレンダー機能・日付管理 | 予定を時系列で可視化するイベントデータ | `id (uuid, PK)` / `user_id (uuid, FK)` / `title (text)` / `start_at` / `end_at` / `all_day (boolean)` / `created_at` |
 | 4 | `tab_sessions` | タブ滞在ログ保存 | URLごとの滞在秒数を記録する行動ログ（一次データ） | `id (bigserial, PK)` / `user_id (uuid, FK)` / `domain` / `url` / `tab_title` / `started_at` / `ended_at` / `duration_sec` / `is_waste` / `created_at` |
@@ -50,6 +50,8 @@
 | `id` | uuid, PK (`auth.users.id` と同一) | ユーザー本人を識別するID |
 | `display_name` | text | 画面に表示するユーザー名 |
 | `timezone` | text | 日時表示の基準となるタイムゾーン |
+| `todo_created_count` | integer, default 0 | ユーザーが作成したTodoの累計数（削除しても減らない） |
+| `todo_completed_count` | integer, default 0 | ユーザーが完了したTodoの累計数（削除しても減らない） |
 | `created_at` | timestamptz | ユーザー登録日時 |
 
 ### 2. todos のカラム説明（表形式）

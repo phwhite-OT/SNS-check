@@ -8,7 +8,34 @@ const { env } = require('../config/env');
 const todosService = require('./todosService');
 const blacklistService = require('./blacklistService');
 const tabSessionsRepository = require('../repositories/tabSessionsRepository');
+const profilesRepository = require('../repositories/profilesRepository');
 const { buildAssetMetrics } = require('./assetValuationService');
+
+function toSafeGoal(value, fallback) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.floor(parsed);
+}
+
+function resolveGoalTargets() {
+    const primary = toSafeGoal(env.SCORE_FIXED_GOAL_PRIMARY, 3);
+    const secondary = toSafeGoal(env.SCORE_FIXED_GOAL_SECONDARY, 5);
+    const sorted = [primary, secondary].sort((a, b) => a - b);
+
+    if (sorted[0] === sorted[1]) {
+        return [sorted[0], sorted[0] + 2];
+    }
+    return sorted;
+}
+
+function buildGoalState(completedLifetime, target) {
+    const progress = Math.min(100, Math.round((completedLifetime / Math.max(target, 1)) * 100));
+    return {
+        target,
+        progress,
+        achieved: completedLifetime >= target,
+    };
+}
 
 // ダッシュボード表示に必要なデータをまとめて取得する関数
 async function getDashboard(userId) {
@@ -26,12 +53,35 @@ async function getDashboard(userId) {
     }, {});
 
     const totalTimeSeconds = Object.values(timeData).reduce((sum, sec) => sum + sec, 0);
-    const doneCount = todos.filter((todo) => todo.completed).length;
+    const currentCreatedCount = todos.length;
+    const currentCompletedCount = todos.filter((todo) => todo.completed).length;
 
-    const score =
+    const todoProgress = await profilesRepository.getTodoProgressStats(userId, {
+        minimumCreated: currentCreatedCount,
+        minimumCompleted: currentCompletedCount,
+    });
+
+    const completedLifetime = todoProgress.completedCount;
+    const createdLifetime = Math.max(todoProgress.createdCount, completedLifetime);
+
+    const [goalPrimary, goalSecondary] = resolveGoalTargets();
+    const activeTarget = completedLifetime < goalPrimary ? goalPrimary : goalSecondary;
+    const activeProgress = Math.min(100, Math.round((completedLifetime / Math.max(activeTarget, 1)) * 100));
+
+    const fixedGoalBonusMultiplier = completedLifetime >= goalSecondary
+        ? 2
+        : completedLifetime >= goalPrimary
+            ? 1
+            : 0;
+
+    const scoreRaw =
         env.DEFAULT_SCORE_BASE +
-        doneCount * env.SCORE_RECOVERY_PER_DONE_TODO -
+        completedLifetime * env.SCORE_RECOVERY_PER_DONE_TODO +
+        createdLifetime * env.SCORE_BONUS_PER_CREATED_TODO +
+        fixedGoalBonusMultiplier * env.SCORE_RECOVERY_PER_DONE_TODO -
         totalTimeSeconds * env.SCORE_PENALTY_PER_SECOND;
+
+    const score = Math.max(0, Math.round(scoreRaw));
 
     let assets;
     try {
@@ -57,6 +107,18 @@ async function getDashboard(userId) {
         score,
         history: [{ timestamp: Date.now(), score }],
         todos,
+        missionProgress: {
+            goals: [goalPrimary, goalSecondary],
+            activeTarget,
+            activeProgress,
+            createdLifetime,
+            completedLifetime,
+            persistence: todoProgress.persistence,
+            byGoal: [
+                buildGoalState(completedLifetime, goalPrimary),
+                buildGoalState(completedLifetime, goalSecondary),
+            ],
+        },
         blacklist,
         timeData,
         siteBreakdown,
