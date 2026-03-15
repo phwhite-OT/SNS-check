@@ -107,7 +107,7 @@ const DEMO_DATA = {
     const hoursAgo = 23 - i;
     const date = new Date(Date.now() - hoursAgo * 3600 * 1000);
     date.setMinutes(0, 0, 0);
-    
+
     // デモ用のイベント生成: 15分使用 (¥300ロス) で統一し、傾きを一定にする
     const hasSnsUsage = (i % 3 === 0); // 3時間おきに使用
     const baseLoss = hasSnsUsage ? 300 : 0;
@@ -130,10 +130,10 @@ const DEMO_DATA = {
   }).reduce((acc, curr, i) => {
     const prevLoss = i > 0 ? acc[i - 1].cumulativeLossJpy : 0;
     const prevNet = i > 0 ? acc[i - 1].netBalance : 0;
-    
+
     curr.cumulativeLossJpy = prevLoss + curr.lossJpy;
     curr.netBalance = prevNet + curr.gainJpy - curr.lossJpy;
-    
+
     acc.push(curr);
     return acc;
   }, []),
@@ -305,12 +305,12 @@ export default function Dashboard({ user, onLogout }) {
   const handleAnalyzeTask = async (taskOrEvent = null) => {
     // taskOrEvent が Event インスタンスなら null 扱いにする（引数なしの onClick で呼ばれた場合）
     const existingTask = (taskOrEvent && taskOrEvent.nativeEvent) ? null : taskOrEvent;
-    
+
     const title = existingTask ? existingTask.title : newTodoTitle;
     const desc = existingTask ? existingTask.description : newTodoDesc;
 
     if (!title || !title.trim() || isAnalyzing) return;
-    
+
     setIsAnalyzing(true);
     setAiResult(null);
     setAiError(null);
@@ -318,7 +318,7 @@ export default function Dashboard({ user, onLogout }) {
     if (existingTask && existingTask.dueDate) {
       setNewTodoDate(existingTask.dueDate);
     }
-    
+
     try {
       const res = await fetch(`${API_BASE}/ai/analyze-task`, {
         method: 'POST',
@@ -335,7 +335,7 @@ export default function Dashboard({ user, onLogout }) {
         setNewTodoEstimate(Math.round(result.totalEstimatedHours * 60));
       }
       setSelectedSubtasks(new Set(result.subtasks.map((_, i) => i)));
-      
+
       // もし詳細モーダルから実行したなら、分析結果を表示するために
       // UIの状態を調整する必要があるかもしれない（現状は新規タスクモーダルと同じUIパターンを利用）
     } catch (e) {
@@ -356,22 +356,22 @@ export default function Dashboard({ user, onLogout }) {
 
       // 既存タスクの分析でない場合は、まず親となるメインタスクを作成
       if (!parentId) {
-          const parentDesc = newTodoEstimate 
-            ? `${newTodoDesc || '[AI分析から生成された親タスク]'} [estimate:${newTodoEstimate}]`
-            : (newTodoDesc || '[AI分析から生成された親タスク]');
-          const parentResponse = await fetch(`${API_BASE}/todos`, {
-            method: 'POST',
-            headers: {
-              'x-user-id': user?.id || DEFAULT_USER_ID,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              title: newTodoTitle,
-              description: parentDesc,
-              priority: newTodoPriority,
-              dueDate: newTodoDate,
-            }),
-          });
+        const parentDesc = newTodoEstimate
+          ? `${newTodoDesc || '[AI分析から生成された親タスク]'} [estimate:${newTodoEstimate}]`
+          : (newTodoDesc || '[AI分析から生成された親タスク]');
+        const parentResponse = await fetch(`${API_BASE}/todos`, {
+          method: 'POST',
+          headers: {
+            'x-user-id': user?.id || DEFAULT_USER_ID,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: newTodoTitle,
+            description: parentDesc,
+            priority: newTodoPriority,
+            dueDate: newTodoDate,
+          }),
+        });
 
         if (!parentResponse.ok) throw new Error('親タスクの作成に失敗しました');
         const parentTask = await parentResponse.json();
@@ -597,7 +597,7 @@ export default function Dashboard({ user, onLogout }) {
     try {
       const res = await fetch(`${API_BASE}/focus-mode`, {
         headers: {
-          'x-user-id': FOCUS_MODE_USER_ID,
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
       });
       if (!res.ok) return;
@@ -618,7 +618,7 @@ export default function Dashboard({ user, onLogout }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': FOCUS_MODE_USER_ID,
+          'x-user-id': user?.id || DEFAULT_USER_ID,
         },
         body: JSON.stringify({ enabled: !focusModeEnabled }),
       });
@@ -957,7 +957,7 @@ export default function Dashboard({ user, onLogout }) {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <span className="todo-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{todo.title}</span>
                                   {hasChildren && (
-                                    <button 
+                                    <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setExpandedSubtasks(prev => {
@@ -992,7 +992,7 @@ export default function Dashboard({ user, onLogout }) {
                               </div>
                               <div className="flex gap-2 items-center">
                                 {!todo.completed && (
-                                  <button 
+                                  <button
                                     onClick={(e) => { e.stopPropagation(); handleAnalyzeTask(todo); setIsTaskModalOpen(true); }}
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: '#7c3aed' }}
                                     title="AIでタスク分析"
@@ -1269,7 +1269,7 @@ export default function Dashboard({ user, onLogout }) {
                     <span className="trend positive"><TrendingUp size={14} /> 4%</span>
                   </div>
                 </div>
-                 <div className="summary-stat-card">
+                <div className="summary-stat-card">
                   <span className="label">潜在ロス (JPY)</span>
                   <div className="value-group">
                     <span className="value">¥{jpyValue.toLocaleString()}</span>
@@ -1289,7 +1289,7 @@ export default function Dashboard({ user, onLogout }) {
                   <div className="card-header">
                     <h2>当日の収支推移 (Net Balance)</h2>
                   </div>
-                    <div style={{ height: 350, marginTop: '1rem' }}>
+                  <div style={{ height: 350, marginTop: '1rem' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={assetLossData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
                         <defs>
@@ -1298,8 +1298,8 @@ export default function Dashboard({ user, onLogout }) {
                             <stop offset={off} stopColor="var(--tf-accent-red)" stopOpacity={1} />
                           </linearGradient>
                           <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset={off} stopColor="var(--tf-accent-lime)" stopOpacity={0.4}/>
-                            <stop offset={off} stopColor="var(--tf-accent-red)" stopOpacity={0.4}/>
+                            <stop offset={off} stopColor="var(--tf-accent-lime)" stopOpacity={0.4} />
+                            <stop offset={off} stopColor="var(--tf-accent-red)" stopOpacity={0.4} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -1490,12 +1490,12 @@ export default function Dashboard({ user, onLogout }) {
               <div className="form-row">
                 <div className="form-group" style={{ flex: 1 }}>
                   <label>所要時間見積もり (分)</label>
-                  <input 
-                    type="number" 
-                    value={newTodoEstimate} 
-                    onChange={(e) => setNewTodoEstimate(e.target.value)} 
-                    placeholder="例: 60 (1時間)" 
-                    disabled={isCreatingTodo} 
+                  <input
+                    type="number"
+                    value={newTodoEstimate}
+                    onChange={(e) => setNewTodoEstimate(e.target.value)}
+                    placeholder="例: 60 (1時間)"
+                    disabled={isCreatingTodo}
                     min="0"
                   />
                   <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
@@ -1652,7 +1652,7 @@ export default function Dashboard({ user, onLogout }) {
                     setIsDetailModalOpen(false);
                   }}
                 >
-                   {togglingTodoMap[viewingTask.id]
+                  {togglingTodoMap[viewingTask.id]
                     ? '更新中...'
                     : (viewingTask.completed ? '未完了に戻す' : '完了にする')}
                 </button>
@@ -1925,10 +1925,10 @@ export default function Dashboard({ user, onLogout }) {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <div 
-        id="extension-sync-data" 
-        data-user-id={user?.id} 
-        data-api-url={API_BASE.startsWith('http') ? API_BASE : (typeof window !== 'undefined' ? window.location.origin + API_BASE : '')} 
+      <div
+        id="extension-sync-data"
+        data-user-id={user?.id}
+        data-api-url={API_BASE.startsWith('http') ? API_BASE : (typeof window !== 'undefined' ? window.location.origin + API_BASE : '')}
         style={{ display: 'none' }}
       ></div>
     </div>
