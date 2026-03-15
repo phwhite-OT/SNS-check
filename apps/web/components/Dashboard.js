@@ -1842,12 +1842,6 @@ export default function Dashboard({ user, onLogout }) {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <div 
-        id="extension-sync-data" 
-        data-user-id={user?.id} 
-        data-api-url={API_BASE.startsWith('http') ? API_BASE : (typeof window !== 'undefined' ? window.location.origin + API_BASE : '')} 
-        style={{ display: 'none' }}
-      ></div>
     </div>
   );
 }
