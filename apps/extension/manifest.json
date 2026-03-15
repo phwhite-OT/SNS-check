@@ -15,7 +15,8 @@
         "*://*.twitter.com/*",
         "*://*.instagram.com/*",
         "*://*.tiktok.com/*",
-        "http://localhost:3001/*"
+        "http://localhost:3001/*",
+        "https://sns-check.onrender.com/*"
     ],
     "background": {
         "service_worker": "background.js"

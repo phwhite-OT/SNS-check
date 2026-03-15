@@ -4,98 +4,343 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Time = Asset Dashboard</title>
+  <title>Focus Quest Extension</title>
   <style>
-    body {
-      width: 300px;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      padding: 10px;
-      background: #111;
-      color: #fff;
+    :root {
+      --bg-main: #0a101f;
+      --bg-card: #131f36;
+      --bg-card-soft: #1d2b49;
+      --text-main: #f6f8ff;
+      --text-dim: #b9c7e6;
+      --line: rgba(189, 208, 255, 0.25);
+      --accent: #4dd4ac;
+      --accent-strong: #31b58f;
+      --danger: #ff6e7a;
+      --shadow: 0 14px 30px rgba(5, 10, 24, 0.45);
     }
 
-    h2 {
-      margin-top: 5px;
-      font-size: 16px;
-      color: #3b82f6;
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 360px;
+      min-height: 560px;
+      font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+      color: var(--text-main);
+      background:
+        radial-gradient(circle at 8% 12%, rgba(77, 212, 172, 0.2), transparent 40%),
+        radial-gradient(circle at 92% 20%, rgba(114, 171, 255, 0.28), transparent 42%),
+        linear-gradient(155deg, #0a101f 0%, #132344 48%, #1a2d54 100%);
+    }
+
+    body {
+      padding: 14px;
+    }
+
+    .shell {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      backdrop-filter: blur(3px);
+      background: rgba(10, 16, 31, 0.48);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .hero {
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid rgba(189, 208, 255, 0.14);
+      background: linear-gradient(120deg, rgba(77, 212, 172, 0.11), rgba(114, 171, 255, 0.08));
+    }
+
+    .kicker {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      color: #9fbdff;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .title {
+      margin: 6px 0 4px;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--text-dim);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .panel {
+      padding: 14px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .label {
+      font-size: 12px;
+      color: #c5d8ff;
+      font-weight: 700;
+    }
+
+    .input {
+      width: 100%;
+      border: 1px solid rgba(169, 194, 255, 0.32);
+      background: rgba(9, 17, 35, 0.72);
+      color: var(--text-main);
+      padding: 10px 12px;
+      border-radius: 10px;
+      outline: none;
+      font-size: 13px;
+      transition: border-color 0.2s ease, transform 0.15s ease;
+    }
+
+    .input:focus {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .btn {
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+      padding: 11px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.2s ease;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+      transform: none;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn-primary {
+      color: #062113;
+      background: linear-gradient(140deg, #57e7bd 0%, #31b58f 100%);
+    }
+
+    .btn-secondary {
+      color: #d4e4ff;
+      background: linear-gradient(130deg, #264d86 0%, #1a3763 100%);
+      margin-top: 8px;
+    }
+
+    .btn-outline {
+      color: #dbebff;
+      background: transparent;
+      border: 1px solid rgba(168, 195, 255, 0.45);
+      margin-top: 8px;
+    }
+
+    .error {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(255, 110, 122, 0.14);
+      color: #ffd8dd;
+      border: 1px solid rgba(255, 131, 142, 0.28);
+      font-size: 12px;
+      display: none;
+    }
+
+    .error.is-visible {
+      display: block;
+    }
+
+    .user-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .user-email {
+      font-size: 12px;
+      color: #c4d8ff;
+      word-break: break-all;
+      max-width: 238px;
+    }
+
+    .logout-link {
+      border: none;
+      background: transparent;
+      color: #ffc6cc;
+      font-size: 12px;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+
+    .score-card {
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: linear-gradient(145deg, rgba(39, 86, 154, 0.9), rgba(24, 59, 112, 0.9));
+      border: 1px solid rgba(155, 187, 255, 0.24);
+    }
+
+    .score-label {
+      margin: 0;
+      color: #b6d3ff;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .score-value {
+      margin: 4px 0 0;
+      font-size: 28px;
+      line-height: 1.1;
+      font-weight: 900;
+      color: #f3fbff;
+    }
+
+    .stats {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+      max-height: 160px;
+      overflow: auto;
+      padding-right: 2px;
     }
 
     .stat-row {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 8px;
-      padding: 8px;
-      background: #222;
-      border-radius: 6px;
+      gap: 10px;
+      background: rgba(23, 35, 60, 0.86);
+      border: 1px solid rgba(159, 188, 255, 0.16);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 12px;
     }
 
-    .btn {
-      width: 100%;
-      padding: 10px;
-      margin-top: 10px;
-      background: #3b82f6;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
+    .stat-row .site {
+      color: #ddebff;
+      font-weight: 700;
     }
 
-    .btn:hover {
-      background: #2563eb;
+    .stat-row .time {
+      color: #ffc1c9;
+      font-weight: 700;
+    }
+
+    .muted {
+      margin: 0;
+      color: #bacbe8;
+      font-size: 12px;
+      line-height: 1.45;
     }
 
     .focus-box {
-      margin-top: 10px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(169, 195, 255, 0.2);
+      background: rgba(19, 31, 54, 0.9);
+      border-radius: 12px;
       padding: 10px;
-      border: 1px solid #2a2a2a;
-      border-radius: 6px;
-      background: #1a1a1a;
     }
 
     .focus-title {
+      margin: 0 0 4px;
       font-size: 12px;
-      color: #93c5fd;
-      font-weight: bold;
-      margin-bottom: 6px;
+      color: #9fc3ff;
+      font-weight: 800;
+      letter-spacing: 0.04em;
     }
 
     .focus-status {
+      margin: 0 0 8px;
+      color: #d6e5ff;
       font-size: 12px;
-      color: #ddd;
-      margin-bottom: 8px;
+      line-height: 1.4;
     }
 
-    .focus-toggle {
-      width: 100%;
-      padding: 8px;
-      border-radius: 6px;
-      border: 1px solid #3b82f6;
-      background: transparent;
-      color: #93c5fd;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    .focus-toggle:hover {
-      background: #1e3a8a;
+    .footer-note {
+      margin-top: 10px;
+      color: #abc3ea;
+      font-size: 11px;
+      line-height: 1.4;
+      opacity: 0.85;
     }
   </style>
 </head>
 
 <body>
-  <h2>HP & ToDo Tracker</h2>
-  <div id="stats">
-    Loading...
-  </div>
+  <div class="shell">
+    <header class="hero">
+      <p class="kicker">FOCUS QUEST</p>
+      <h1 class="title">集中ミッション</h1>
+      <p class="subtitle">webアプリと同じアカウントでログインして、閲覧トラッキングを紐付けます。</p>
+    </header>
 
-  <div class="focus-box">
-    <div class="focus-title">集中モード</div>
-    <div id="focusStatus" class="focus-status">状態を取得中...</div>
-    <button id="focusToggleBtn" class="focus-toggle">切り替え</button>
-  </div>
+    <section id="loginView" class="panel">
+      <form id="loginForm">
+        <div class="field">
+          <label class="label" for="emailInput">メールアドレス</label>
+          <input id="emailInput" class="input" type="email" placeholder="you@example.com" autocomplete="email" required />
+        </div>
+        <div class="field">
+          <label class="label" for="passwordInput">パスワード</label>
+          <input id="passwordInput" class="input" type="password" placeholder="••••••••" autocomplete="current-password" required />
+        </div>
+        <button id="loginBtn" class="btn btn-primary" type="submit">ログイン</button>
+      </form>
+      <p id="authError" class="error"></p>
+      <p class="footer-note">ログイン後に、時間データは選択したアカウントへ送信されます。</p>
+    </section>
 
-  <button id="dashboardBtn" class="btn">View Full Dashboard</button>
+    <section id="appView" class="panel hidden">
+      <div class="user-head">
+        <div id="userEmail" class="user-email">-</div>
+        <button id="logoutBtn" class="logout-link" type="button">ログアウト</button>
+      </div>
+
+      <div class="score-card">
+        <p class="score-label">Current Score</p>
+        <p id="scoreValue" class="score-value">--</p>
+      </div>
+
+      <div id="stats" class="stats">
+        <p class="muted">データを取得しています...</p>
+      </div>
+      <p id="statsError" class="error"></p>
+
+      <div class="focus-box">
+        <p class="focus-title">集中モード</p>
+        <p id="focusStatus" class="focus-status">状態を取得中...</p>
+        <button id="focusToggleBtn" class="btn btn-outline" type="button">切り替え</button>
+      </div>
+
+      <button id="syncHistoryBtn" class="btn btn-outline" type="button">履歴を今すぐ同期</button>
+      <button id="dashboardBtn" class="btn btn-secondary" type="button">View Full Dashboard</button>
+    </section>
+  </div>
   <script src="popup.js"></script>
 </body>
 
