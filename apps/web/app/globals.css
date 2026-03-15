@@ -54,6 +54,7 @@ body::before {
   background-image: linear-gradient(rgba(15, 118, 110, 0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 118, 110, 0.04) 1px, transparent 1px);
   background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(circle at 50% 30%, rgba(0, 0, 0, 0.9), transparent 78%);
   mask-image: radial-gradient(circle at 50% 30%, rgba(0, 0, 0, 0.9), transparent 78%);
   z-index: -1;
 }
@@ -136,6 +137,7 @@ h3,
   border-radius: 32px;
   padding: 2.25rem;
   box-shadow: var(--tf-shadow);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
@@ -329,6 +331,7 @@ h3,
   padding: 2.1rem;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(148, 163, 184, 0.3);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   box-shadow: var(--tf-shadow);
 }
@@ -485,6 +488,7 @@ h3,
   border-radius: 26px;
   background: var(--tf-sidebar);
   border: 1px solid var(--tf-border);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   box-shadow: var(--tf-shadow-soft);
   display: flex;
@@ -614,6 +618,7 @@ h3,
   border-radius: 26px;
   border: 1px solid var(--tf-border);
   background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   box-shadow: var(--tf-shadow-soft);
   display: flex;
@@ -1213,6 +1218,7 @@ h3,
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.4);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
@@ -1433,6 +1439,7 @@ h3,
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1440,10 +1447,12 @@ h3,
 }
 
 @keyframes floatCard {
+
   0%,
   100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-6px);
   }
@@ -1484,7 +1493,7 @@ h3,
   }
 
   .main-layout {
-    min-height: auto;
+    min-height: 0;
     border-radius: 18px;
   }
 
