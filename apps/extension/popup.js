@@ -3,6 +3,41 @@ const API_DASHBOARD = 'http://localhost:3001/api/dashboard';
 // TODO: Supabaseの profiles.id（実在UUID）に置き換えてください。
 const X_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
 
+const focusStatusEl = document.getElementById('focusStatus');
+const focusToggleBtn = document.getElementById('focusToggleBtn');
+
+function renderFocusStatus(status) {
+    const enabled = !!status?.enabled;
+    focusStatusEl.textContent = enabled
+        ? '現在: ON（ブラックリストを即ロック）'
+        : '現在: OFF';
+    focusToggleBtn.textContent = enabled
+        ? '集中モードをOFFにする'
+        : '集中モードをONにする';
+}
+
+function refreshFocusStatus() {
+    chrome.runtime.sendMessage({ type: 'focusMode:getStatus' }, (status) => {
+        if (chrome.runtime.lastError) return;
+        renderFocusStatus(status);
+    });
+}
+
+focusToggleBtn?.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'focusMode:getStatus' }, (current) => {
+        if (chrome.runtime.lastError) return;
+        chrome.runtime.sendMessage(
+            { type: 'focusMode:setEnabled', enabled: !current?.enabled },
+            (status) => {
+                if (chrome.runtime.lastError) return;
+                renderFocusStatus(status);
+            }
+        );
+    });
+});
+
+refreshFocusStatus();
+
 // 新しいタブでWebダッシュボード（localhost:3000）を開きます
 document.getElementById('dashboardBtn').addEventListener('click', () => {
     chrome.tabs.create({ url: 'http://localhost:3000' });

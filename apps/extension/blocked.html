@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ACCESS DENIED</title>
     <style>
         * {
@@ -26,6 +27,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            -webkit-user-select: none;
             user-select: none;
             cursor: default;
         }
@@ -215,105 +217,13 @@
     </div>
 
     <div class="buttons">
-        <button class="btn btn-close" onclick="closeTab()">[ TAB を閉じる ]</button>
-        <button class="btn btn-back" onclick="goBack()">[ 前のページへ ]</button>
+        <button id="btn-close" class="btn btn-close">[ TAB を閉じる ]</button>
+        <button id="btn-back" class="btn btn-back">[ 前のページへ ]</button>
     </div>
 
     <div class="countdown" id="countdown"></div>
 
-    <script>
-        // ===== URL パラメータ取得 =====
-        const params = new URLSearchParams(window.location.search);
-        const siteName = params.get('site') || '不明なサイト';
-        const limitMin = params.get('limit') || '15';
-        const elapsed = params.get('elapsed') || limitMin;
-
-        // ===== ターミナルログ定義 =====
-        const lines = [
-            { prompt: '>>', label: 'SYSTEM  :', value: 'ブラックリストサイト滞在制限に達しました。', cls: 'value-red' },
-            { prompt: '>>', label: 'SITE    :', value: siteName, cls: 'value-orange' },
-            { prompt: '>>', label: 'LIMIT   :', value: `${limitMin} 分`, cls: 'value-green' },
-            { prompt: '>>', label: 'ELAPSED :', value: `${elapsed} 分`, cls: 'value-red' },
-            { prompt: '>>', label: 'STATUS  :', value: '■ LOCKED', cls: 'value-red' },
-            { prompt: '>>', label: 'ACTION  :', value: 'タブをロックしました。作業に戻ってください。', cls: 'value-dim' },
-        ];
-
-        const terminal = document.getElementById('terminal');
-
-        // ===== タイプライターアニメーション =====
-        function addLine(lineData, delay) {
-            return new Promise(resolve => {
-                setTimeout(() => {
-                    const div = document.createElement('div');
-                    div.className = 'line';
-
-                    const promptEl = document.createElement('span');
-                    promptEl.className = 'prompt';
-                    promptEl.textContent = lineData.prompt;
-
-                    const labelEl = document.createElement('span');
-                    labelEl.className = 'label';
-                    labelEl.textContent = lineData.label;
-
-                    const valueEl = document.createElement('span');
-                    valueEl.className = `typed active ${lineData.cls}`;
-
-                    div.appendChild(promptEl);
-                    div.appendChild(labelEl);
-                    div.appendChild(valueEl);
-                    terminal.appendChild(div);
-
-                    // タイプ効果
-                    const text = lineData.value;
-                    let i = 0;
-                    const speed = 30;
-                    const typeInterval = setInterval(() => {
-                        valueEl.textContent = text.slice(0, i + 1);
-                        i++;
-                        if (i >= text.length) {
-                            clearInterval(typeInterval);
-                            valueEl.classList.remove('active');
-                            resolve();
-                        }
-                    }, speed);
-                }, delay);
-            });
-        }
-
-        async function runAnimation() {
-            for (let i = 0; i < lines.length; i++) {
-                await addLine(lines[i], i === 0 ? 300 : 0);
-                await new Promise(r => setTimeout(r, 80));
-            }
-        }
-
-        runAnimation();
-
-        // ===== 自動クローズ カウントダウン =====
-        let countdown = 30;
-        const countdownEl = document.getElementById('countdown');
-
-        const timer = setInterval(() => {
-            countdownEl.innerHTML = `>> タブは <span>${countdown}</span> 秒後に自動で閉じます...`;
-            countdown--;
-            if (countdown < 0) {
-                clearInterval(timer);
-                window.close();
-            }
-        }, 1000);
-
-        // ===== ボタン操作 =====
-        function closeTab() {
-            clearInterval(timer);
-            window.close();
-        }
-
-        function goBack() {
-            clearInterval(timer);
-            // 履歴を2つ戻る（blocked.html の手前のページへ）
-            history.go(-2);
-        }
-    </script>
+    <script src="blocked.js"></script>
 </body>
 
 </html>
