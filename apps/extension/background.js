@@ -1,6 +1,6 @@
-const APP_ORIGIN = 'https://sns-check.onrender.com';
-const API_BASE = `${APP_ORIGIN}/api`;
-const API_ENDPOINT = `${API_BASE}/time`;
+let APP_ORIGIN = 'https://sns-check.onrender.com';
+let API_BASE = `${APP_ORIGIN}/api`;
+let API_ENDPOINT = `${API_BASE}/time`;
 const AUTH_STORAGE_KEY = 'authState';
 const FOCUS_MODE_STORAGE_KEY = 'focusModeEnabled';
 
@@ -81,6 +81,19 @@ function resetTracking() {
     activeTabId = null;
     activeSite = null;
     startTime = null;
+}
+
+function loadConfig() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['apiUrl'], (result) => {
+            if (result.apiUrl) {
+                APP_ORIGIN = result.apiUrl.replace(/\/api\/?$/, '');
+                API_BASE = `${APP_ORIGIN}/api`;
+                API_ENDPOINT = `${API_BASE}/time`;
+            }
+            resolve();
+        });
+    });
 }
 
 function loadInitialState() {
@@ -548,6 +561,30 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.type === 'sync:config') {
+        const { userId, apiUrl } = message.config;
+        const updates = {};
+        if (apiUrl) updates.apiUrl = apiUrl;
+
+        // userId があれば authState も更新する（ログイン状態を偽装/維持）
+        if (userId && (!authState.loggedIn || authState.userId !== userId)) {
+            const nextAuth = {
+                ...authState,
+                loggedIn: true,
+                userId: userId,
+                email: authState.email || 'synced-user@example.com'
+            };
+            setAuthState(nextAuth);
+        }
+
+        chrome.storage.local.set(updates, () => {
+            loadConfig().then(() => {
+                sendResponse({ success: true });
+            });
+        });
+        return true;
+    }
+
     if (!message) return;
 
     if (message.type === 'auth:getState') {
@@ -637,6 +674,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 async function initialize() {
+    await loadConfig();
     await loadInitialState();
     await fetchBlacklist();
     await syncFocusModeFromApi();

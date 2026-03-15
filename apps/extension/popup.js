@@ -1,6 +1,6 @@
-const APP_ORIGIN = 'https://sns-check.onrender.com';
-const API_DASHBOARD = `${APP_ORIGIN}/api/dashboard`;
-const DASHBOARD_URL = `${APP_ORIGIN}/`;
+let APP_ORIGIN = 'https://sns-check.onrender.com';
+let API_DASHBOARD = `${APP_ORIGIN}/api/dashboard`;
+let DASHBOARD_URL = `${APP_ORIGIN}/`;
 
 const loginView = document.getElementById('loginView');
 const appView = document.getElementById('appView');
@@ -14,6 +14,19 @@ const logoutBtn = document.getElementById('logoutBtn');
 const statsDiv = document.getElementById('stats');
 const statsError = document.getElementById('statsError');
 const scoreValue = document.getElementById('scoreValue');
+
+async function loadConfig() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['apiUrl'], (result) => {
+            if (result.apiUrl) {
+                APP_ORIGIN = result.apiUrl.replace(/\/api\/?$/, '');
+                API_DASHBOARD = `${APP_ORIGIN}/api/dashboard`;
+                DASHBOARD_URL = `${APP_ORIGIN}/`;
+            }
+            resolve();
+        });
+    });
+}
 const focusStatusEl = document.getElementById('focusStatus');
 const focusToggleBtn = document.getElementById('focusToggleBtn');
 const dashboardBtn = document.getElementById('dashboardBtn');
@@ -183,6 +196,7 @@ async function loadDashboard() {
 
 async function refreshAuthState() {
     try {
+        await loadConfig();
         const auth = await sendMessage({ type: 'auth:getState' });
         renderAuthView(auth);
         if (auth?.loggedIn) {
