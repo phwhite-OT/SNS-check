@@ -27,11 +27,13 @@ async function ensureDefaultBlacklist(userId) {
         return;
     }
 
-    const current = await alertRulesRepository.listAlertRulesByUser(userId);
-    const currentSet = new Set(current.map((item) => item.target_domain));
-    const missing = DEFAULT_BLACKLIST.filter((domain) => !currentSet.has(domain));
+    // デフォルト投入は初回のみ。ユーザーが一度でもルールを持った後は再投入しない。
+    const hasAnyRule = await alertRulesRepository.hasAnyAlertRuleByUser(userId);
+    if (hasAnyRule) {
+        return;
+    }
 
-    for (const domain of missing) {
+    for (const domain of DEFAULT_BLACKLIST) {
         try {
             await alertRulesRepository.insertAlertRule(userId, domain, 900);
         } catch (error) {

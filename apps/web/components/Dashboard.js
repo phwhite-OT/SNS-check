@@ -52,11 +52,6 @@ function toDueTimestamp(dueDate) {
 }
 
 const DEMO_DATA = {
-  score: 850,
-  history: Array.from({ length: 24 }, (_, i) => ({
-    timestamp: Date.now() - (23 - i) * 3600000,
-    score: 700 + Math.floor(Math.random() * 200)
-  })),
   todos: [
     { id: 'd1', title: '【重要】最終レポートの構成作成', completed: false, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: '章立てと参考文献のリストアップ [estimate:120]' },
     { id: 'd2', title: '英単語ターゲット1900 1-200復習', completed: true, priority: 'medium', dueDate: format(new Date(), 'yyyy-MM-dd'), description: 'アプリで確認 [estimate:30]' },
@@ -649,14 +644,6 @@ export default function Dashboard({ user, onLogout }) {
       window.removeEventListener('resize', updateFoldState);
     };
   }, [allTodosSorted, activeTab]);
-
-  // Derived data (Define BEFORE early returns to satisfy Hook rules)
-  const productivityData = useMemo(() => {
-    return (data?.history || []).map(item => ({
-      time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      score: item.score
-    }));
-  }, [data?.history]);
 
   // Analysis Page Data
   const siteBreakdown = data?.siteBreakdown || [];

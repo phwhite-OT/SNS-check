@@ -18,8 +18,36 @@ async function listAlertRulesByUser(userId) {
     return data || [];
 }
 
+// ユーザーがルールを一度でも作成したことがあるかどうかを判定
+async function hasAnyAlertRuleByUser(userId) {
+    const { count, error } = await supabase
+        .from('alert_rules')
+        .select('id', { head: true, count: 'exact' })
+        .eq('user_id', userId);
+
+    if (error) throw error;
+    return Number(count || 0) > 0;
+}
+
 // 新しいアラートルールを追加
 async function insertAlertRule(userId, targetDomain, thresholdSec = 900) {
+    // 既存の論理削除済みルールがあれば再有効化する
+    const { data: updatedRows, error: updateError } = await supabase
+        .from('alert_rules')
+        .update({
+            threshold_sec: thresholdSec,
+            enabled: true,
+        })
+        .eq('user_id', userId)
+        .eq('target_domain', targetDomain)
+        .select('id, target_domain, threshold_sec, enabled, created_at')
+        .order('created_at', { ascending: false });
+
+    if (updateError) throw updateError;
+    if (Array.isArray(updatedRows) && updatedRows.length > 0) {
+        return updatedRows[0];
+    }
+
     const { data, error } = await supabase
         .from('alert_rules')
         .insert({
@@ -48,6 +76,7 @@ async function deleteAlertRuleByDomain(userId, targetDomain) {
 
 module.exports = {
     listAlertRulesByUser,
+    hasAnyAlertRuleByUser,
     insertAlertRule,
     deleteAlertRuleByDomain,
 };
