@@ -34,12 +34,27 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-const API_BASE = (
-  process.env.NEXT_PUBLIC_API_BASE ||
-  (process.env.NEXT_PUBLIC_API_URL
-    ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`
-    : '/api')
-).replace(/\/$/, '');
+const DEFAULT_APP_ORIGIN = 'https://sns-check.onrender.com';
+
+function resolveApiBase() {
+  if (typeof window !== 'undefined') {
+    const { origin, hostname } = window.location;
+    if (process.env.NEXT_PUBLIC_API_BASE) {
+      return process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, '');
+    }
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      return `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')}/api`;
+    }
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3001/api';
+    }
+    return `${origin}/api`;
+  }
+  return '/api';
+}
+
+const API_BASE = resolveApiBase();
+
 const FOCUS_MODE_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
 const DEFAULT_USER_ID = 'b186ec48-06dd-4844-b29d-ab987e2b5989';
