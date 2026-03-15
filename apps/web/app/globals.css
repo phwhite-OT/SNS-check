@@ -1,16 +1,169 @@
 :root {
-  --tf-primary: #5244e1;
-  --tf-primary-light: #6e61f0;
-  --tf-bg: #f8f9fe;
+  --tf-primary: #1877f2;
+  --tf-primary-light: #3b82f6;
+  --tf-bg: #f8fafc;
   --tf-card: #ffffff;
-  --tf-text: #1a1d35;
-  --tf-text-muted: #8a8e9e;
-  --tf-border: #edf0f7;
+  --tf-text: #0f172a;
+  --tf-text-muted: #64748b;
+  --tf-border: #e2e8f0;
   --tf-sidebar: #ffffff;
-  --tf-accent-green: #4ade80;
+  --tf-accent-green: #22c55e;
   --tf-accent-red: #ef4444;
-  --tf-shadow: 0 4px 12px rgba(82, 68, 225, 0.05);
+  --tf-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
   --tf-glass: rgba(255, 255, 255, 0.7);
+}
+
+/* Login page layout (photo-like) */
+.login-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--tf-bg), rgba(29, 78, 216, 0.05));
+}
+
+.login-layout {
+  display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 5rem 2rem;
+  gap: 4rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  justify-content: flex-start;
+  align-items: flex-end;
+  text-align: right;
+  padding-top: 2rem;
+}
+
+.login-copy {
+  max-width: 420px;
+}
+
+.login-title {
+  font-size: 3.5rem;
+  margin: 0;
+  color: var(--tf-primary);
+  line-height: 1.1;
+}
+
+.login-subtitle {
+  margin: 1rem 0 0;
+  font-size: 1.1rem;
+  color: var(--tf-text-muted);
+}
+
+.login-deco {
+  position: relative;
+  width: 380px;
+  height: 320px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.login-deco-card {
+  background: white;
+  border-radius: 2rem;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  position: absolute;
+}
+
+.login-deco-card--large {
+  width: 260px;
+  height: 200px;
+  top: 0;
+  right: 0;
+  background: linear-gradient(135deg, rgba(29, 78, 216, 0.12), rgba(255, 255, 255, 0.85));
+}
+
+.login-deco-card--medium {
+  width: 220px;
+  height: 180px;
+  top: 60px;
+  right: 60px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(255, 255, 255, 0.9));
+}
+
+.login-deco-card--small {
+  width: 180px;
+  height: 140px;
+  top: 120px;
+  right: 140px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.16), rgba(255, 255, 255, 0.92));
+}
+
+.login-deco-badge {
+  position: absolute;
+  top: 32px;
+  left: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 24px;
+  background: var(--tf-primary);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+}
+
+.login-right {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ログイン画面の文字間隔を広げる */
+.login-right .space-y-4 > * + * {
+  margin-top: 1.5rem;
+}
+
+.login-right h1 {
+  margin-bottom: 2rem;
+}
+
+.login-right .mt-6 {
+  margin-top: 2rem;
+}
+
+.login-right .pt-6 {
+  padding-top: 2rem;
+}
+
+.login-right .mb-4 {
+  margin-bottom: 1.5rem;
+}
+
+/* Adjustments for small screens */
+@media (max-width: 992px) {
+  .login-layout {
+    flex-direction: column;
+    padding: 4rem 1.5rem;
+  }
+
+  .login-left {
+    align-items: center;
+    text-align: center;
+  }
+
+  .login-deco {
+    width: 320px;
+    height: 260px;
+  }
+
+  .login-deco-card--large {
+    top: 0;
+    right: 0;
+  }
+
+  .login-deco-badge {
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 
 * {
