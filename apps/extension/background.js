@@ -580,9 +580,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
 
         chrome.storage.local.set(updates, () => {
-            loadConfig().then(() => {
-                sendResponse({ success: true });
-            });
+            loadConfig()
+                .then(() => fetchBlacklist())
+                .then(() => syncFocusModeFromApi())
+                .then(() => {
+                    if (focusModeEnabled) {
+                        checkCurrentActiveTab();
+                    }
+                    sendResponse({ success: true });
+                })
+                .catch((error) => {
+                    console.error('Failed to sync extension config:', error);
+                    sendResponse({ success: false, error: error?.message || 'sync failed' });
+                });
         });
         return true;
     }
