@@ -29,6 +29,7 @@ const { postHistory } = require('../controllers/historyController');
 const { getDashboard } = require('../controllers/dashboardController');
 const { getFocusMode, setFocusMode } = require('../controllers/focusModeController');
 const { postAnalyzeTask } = require('../controllers/aiController');
+const { getHourlyWage, updateHourlyWage } = require('../controllers/profileSettingsController');
 const authRouter = require('./auth');
 
 const router = express.Router();
@@ -86,6 +87,12 @@ router.get('/focus-mode', asyncHandler(getFocusMode));
 
 // 集中モード状態の更新
 router.post('/focus-mode', asyncHandler(setFocusMode));
+
+// ユーザー時給の取得
+router.get('/settings/hourly-wage', asyncHandler(getHourlyWage));
+
+// ユーザー時給の更新
+router.put('/settings/hourly-wage', asyncHandler(updateHourlyWage));
 
 // AIによるタスク分析
 router.post('/ai/analyze-task', asyncHandler(postAnalyzeTask));

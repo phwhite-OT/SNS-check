@@ -61,8 +61,20 @@ async function getBtcPriceJpy() {
     }
 }
 
-async function buildAssetMetrics(userId, totalTimeSeconds) {
-    const hourlyWageJpy = env.HOURLY_WAGE_JPY;
+function toSafeHourlyWage(value, fallback) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return Math.max(1, Math.floor(Number(fallback) || Number(env.HOURLY_WAGE_JPY) || 1200));
+    }
+    return Math.max(1, Math.floor(parsed));
+}
+
+async function buildAssetMetrics(userId, totalTimeSeconds, options = {}) {
+    const resolvedHourlyWage = options.hourlyWageJpy !== undefined
+        ? toSafeHourlyWage(options.hourlyWageJpy, env.HOURLY_WAGE_JPY)
+        : await profilesRepository.getHourlyWageJpy(userId, env.HOURLY_WAGE_JPY);
+
+    const hourlyWageJpy = toSafeHourlyWage(resolvedHourlyWage, env.HOURLY_WAGE_JPY);
     const lostAmountJpy = Math.floor((totalTimeSeconds / 3600) * hourlyWageJpy);
 
     const btc = await getBtcPriceJpy();
@@ -92,6 +104,7 @@ async function buildAssetMetrics(userId, totalTimeSeconds) {
         btcPriceJpy: btc.priceJpy,
         btcPriceSource: btc.source,
         btcPriceFetchedAt: btc.fetchedAt,
+        hourlyWageJpy,
     };
 }
 

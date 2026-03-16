@@ -89,18 +89,26 @@ async function getDashboard(userId) {
 
     const score = Math.max(0, Math.round(scoreRaw));
 
+    let hourlyWageJpy = env.HOURLY_WAGE_JPY;
+    try {
+        hourlyWageJpy = await profilesRepository.getHourlyWageJpy(userId, env.HOURLY_WAGE_JPY);
+    } catch (error) {
+        console.error('Failed to resolve user hourly wage, using env fallback:', error.message);
+    }
+
     let assets;
     try {
-        assets = await buildAssetMetrics(userId, totalTimeSeconds);
+        assets = await buildAssetMetrics(userId, totalTimeSeconds, { hourlyWageJpy });
     } catch (error) {
         console.error('Failed to build asset metrics:', error);
-        const fallbackJpy = Math.floor((totalTimeSeconds / 3600) * env.HOURLY_WAGE_JPY);
+        const fallbackJpy = Math.floor((totalTimeSeconds / 3600) * hourlyWageJpy);
         assets = {
             jpy: fallbackJpy,
             btc: 0,
             btcPriceJpy: null,
             btcPriceSource: 'unavailable',
             btcPriceFetchedAt: null,
+            hourlyWageJpy,
         };
     }
 
@@ -112,7 +120,7 @@ async function getDashboard(userId) {
 
     // --- 過去24時間の時間別累積損失（BTC）の計算 ---
     const btcPrice = assets.btcPriceJpy || 10000000;
-    const hourlyWageJpy = env.HOURLY_WAGE_JPY;
+    const effectiveHourlyWageJpy = Number(assets.hourlyWageJpy || hourlyWageJpy || env.HOURLY_WAGE_JPY);
     
     // 24時間分のバケットを用意
     const now = new Date();
@@ -140,7 +148,7 @@ async function getDashboard(userId) {
         const bucket = hourlyBuckets.find(b => startTime >= b.timestamp && startTime < b.timestamp + 3600 * 1000);
         if (bucket) {
             const duration = Number(session.duration_sec) > 0 ? Number(session.duration_sec) : 120;
-            const jpyLoss = (duration / 3600) * hourlyWageJpy;
+            const jpyLoss = (duration / 3600) * effectiveHourlyWageJpy;
             bucket.lossJpy += jpyLoss;
             
             // 同一ドメインのイベントがあれば加算、なければ新規
@@ -159,13 +167,13 @@ async function getDashboard(userId) {
         const bucket = hourlyBuckets.find(b => updateTime >= b.timestamp && updateTime < b.timestamp + 3600 * 1000);
         if (bucket) {
             const minutes = parseEstimate(todo.description);
-            const jpyGain = (minutes / 60) * hourlyWageJpy;
+            const jpyGain = (minutes / 60) * effectiveHourlyWageJpy;
             bucket.gainJpy += jpyGain;
             bucket.events.push({ type: 'gain', name: `✓ ${todo.title}`, jpy: jpyGain });
         }
     });
 
-    const totalRecoveredJpy = todos.filter(t => t.completed).reduce((sum, t) => sum + (parseEstimate(t.description) / 60) * hourlyWageJpy, 0);
+    const totalRecoveredJpy = todos.filter(t => t.completed).reduce((sum, t) => sum + (parseEstimate(t.description) / 60) * effectiveHourlyWageJpy, 0);
 
     // 累積和に変換
     let cumulativeLoss = 0;
@@ -202,6 +210,7 @@ async function getDashboard(userId) {
         hourlyStats,
         totalTimeSeconds,
         assets,
+        hourlyWageJpy: effectiveHourlyWageJpy,
     };
 }
 
