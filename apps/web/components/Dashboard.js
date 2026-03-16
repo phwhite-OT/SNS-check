@@ -188,13 +188,60 @@ const DEMO_DATA = {
     jpy: 6840,
     btc: 0.00000045,
     btcPriceJpy: 15200000
-  }
+  },
+  hourlyWageJpy: 1200
 };
 
 const parseEstimate = (desc) => {
   const match = desc?.match(/\[estimate:(\d+)\]/);
   return match ? parseInt(match[1], 10) : 0;
 };
+
+function toSafeHourlyWageJpy(value, fallback = 1200) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.max(1, Math.floor(Number(fallback) || 1200));
+  }
+  return Math.max(1, Math.floor(parsed));
+}
+
+const DEMO_BASE_HOURLY_WAGE_JPY = toSafeHourlyWageJpy(DEMO_DATA.hourlyWageJpy, 1200);
+
+function scaleDemoAmount(value, ratio) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * ratio);
+}
+
+function buildDemoData(hourlyWageJpy) {
+  const safeHourlyWageJpy = toSafeHourlyWageJpy(hourlyWageJpy, DEMO_BASE_HOURLY_WAGE_JPY);
+  const ratio = safeHourlyWageJpy / DEMO_BASE_HOURLY_WAGE_JPY;
+  const totalTimeSeconds = Number(DEMO_DATA.totalTimeSeconds || 0);
+
+  const scaledHourlyStats = (DEMO_DATA.hourlyStats || []).map((item) => ({
+    ...item,
+    lossJpy: scaleDemoAmount(item.lossJpy, ratio),
+    gainJpy: scaleDemoAmount(item.gainJpy, ratio),
+    cumulativeLossJpy: scaleDemoAmount(item.cumulativeLossJpy, ratio),
+    netBalance: scaleDemoAmount(item.netBalance, ratio),
+    events: Array.isArray(item.events)
+      ? item.events.map((event) => ({
+          ...event,
+          jpy: scaleDemoAmount(event.jpy, ratio),
+        }))
+      : [],
+  }));
+
+  return {
+    ...DEMO_DATA,
+    hourlyWageJpy: safeHourlyWageJpy,
+    hourlyStats: scaledHourlyStats,
+    assets: {
+      ...(DEMO_DATA.assets || {}),
+      jpy: Math.floor((totalTimeSeconds / 3600) * safeHourlyWageJpy),
+    },
+  };
+}
 
 function resolveAllTasksFoldHeight(viewportHeight) {
   if (!Number.isFinite(viewportHeight) || viewportHeight <= 0) return 340;
@@ -206,6 +253,7 @@ export default function Dashboard({ user, onLogout }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [demoHourlyWageJpy, setDemoHourlyWageJpy] = useState(DEMO_BASE_HOURLY_WAGE_JPY);
 
   // Layout states
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'calendar', 'analysis'
@@ -260,10 +308,16 @@ export default function Dashboard({ user, onLogout }) {
   const [blacklistInput, setBlacklistInput] = useState('');
   const [blacklistActionDomain, setBlacklistActionDomain] = useState(null);
 
+  // Hourly wage states
+  const [hourlyWageInput, setHourlyWageInput] = useState('');
+  const [hourlyWageError, setHourlyWageError] = useState('');
+  const [isSavingHourlyWage, setIsSavingHourlyWage] = useState(false);
+  const [isHourlyWageEditing, setIsHourlyWageEditing] = useState(false);
+
   // Fetch data (with user ID from auth)
   const fetchData = async () => {
     if (isDemoMode) {
-      setData(DEMO_DATA);
+      setData(buildDemoData(demoHourlyWageJpy));
       setIsLoading(false);
       return;
     }
@@ -297,12 +351,19 @@ export default function Dashboard({ user, onLogout }) {
       fetchFocusMode();
     }, 5000);
     return () => clearInterval(intervalId);
-  }, [user, isDemoMode]);
+  }, [user, isDemoMode, demoHourlyWageJpy]);
 
   useEffect(() => {
     const ticker = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(ticker);
   }, []);
+
+  useEffect(() => {
+    const parsed = Number(data?.hourlyWageJpy);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    if (isHourlyWageEditing) return;
+    setHourlyWageInput(String(Math.floor(parsed)));
+  }, [data?.hourlyWageJpy, isHourlyWageEditing]);
 
   // Actions
   const handleAddTodo = async (e) => {
@@ -668,6 +729,64 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
+  const handleSaveHourlyWage = async (event) => {
+    event.preventDefault();
+    if (isSavingHourlyWage) return;
+
+    const parsed = Number(hourlyWageInput);
+    const normalized = Math.floor(parsed);
+
+    if (!Number.isFinite(parsed) || normalized < 1 || normalized > 1000000) {
+      setHourlyWageError('時給は 1〜1,000,000 の整数で入力してください。');
+      return;
+    }
+
+    setHourlyWageError('');
+    setIsSavingHourlyWage(true);
+
+    try {
+      if (isDemoMode) {
+        setDemoHourlyWageJpy(normalized);
+        setData(buildDemoData(normalized));
+        setHourlyWageInput(String(normalized));
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/settings/hourly-wage`, {
+        method: 'PUT',
+        headers: {
+          'x-user-id': user?.id || DEFAULT_USER_ID,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ hourlyWageJpy: normalized }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error || '時給の更新に失敗しました。');
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      const saved = Number(payload?.hourlyWageJpy || normalized);
+
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          hourlyWageJpy: Math.floor(saved),
+        };
+      });
+
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      setHourlyWageError(e.message || '時給の更新に失敗しました。');
+    } finally {
+      setIsSavingHourlyWage(false);
+      setIsHourlyWageEditing(false);
+    }
+  };
+
   const fetchFocusMode = async () => {
     try {
       const res = await fetch(`${API_BASE}/focus-mode`, {
@@ -820,6 +939,12 @@ export default function Dashboard({ user, onLogout }) {
 
   // Analysis Page Data
   const siteBreakdown = data?.siteBreakdown || [];
+  const effectiveHourlyWageJpy = useMemo(() => {
+    const parsed = Number(data?.hourlyWageJpy);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 1200;
+    return Math.floor(parsed);
+  }, [data?.hourlyWageJpy]);
+
   const blacklistDomains = useMemo(() => {
     return Array.from(new Set(
       (data?.blacklist || [])
@@ -897,8 +1022,8 @@ export default function Dashboard({ user, onLogout }) {
   const totalRecoveredJpy = useMemo(() => {
     return (data?.todos || [])
       .filter(t => t.completed)
-      .reduce((sum, t) => sum + (parseEstimate(t.description) / 60) * 1200, 0);
-  }, [data?.todos]);
+      .reduce((sum, t) => sum + (parseEstimate(t.description) / 60) * effectiveHourlyWageJpy, 0);
+  }, [data?.todos, effectiveHourlyWageJpy]);
 
   const assetLossData = useMemo(() => {
     const stats = (data?.hourlyStats || []);
@@ -1424,6 +1549,36 @@ export default function Dashboard({ user, onLogout }) {
                     <span className="value value-domain">{topSiteDomain || 'N/A'}</span>
                   </div>
                 </div>
+                <div className="summary-stat-card">
+                  <span className="label">あなたの時給 (JPY/h)</span>
+                  <form className="hourly-wage-form" onSubmit={handleSaveHourlyWage}>
+                    <div className="value-group">
+                      <span className="value">¥{effectiveHourlyWageJpy.toLocaleString()}</span>
+                    </div>
+                    <div className="hourly-wage-input-row">
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000000"
+                        step="1"
+                        className="hourly-wage-input"
+                        value={hourlyWageInput}
+                        onFocus={() => setIsHourlyWageEditing(true)}
+                        onBlur={() => setIsHourlyWageEditing(false)}
+                        onChange={(e) => {
+                          setHourlyWageInput(e.target.value);
+                          if (hourlyWageError) setHourlyWageError('');
+                        }}
+                        placeholder="例: 1200"
+                        disabled={isSavingHourlyWage}
+                      />
+                      <button type="submit" className="btn-hourly-wage-save" disabled={isSavingHourlyWage}>
+                        {isSavingHourlyWage ? '保存中...' : '保存'}
+                      </button>
+                    </div>
+                    {hourlyWageError && <span className="hourly-wage-error">{hourlyWageError}</span>}
+                  </form>
+                </div>
               </div>
 
               <div className="analysis-main-grid">
@@ -1736,7 +1891,7 @@ export default function Dashboard({ user, onLogout }) {
                     min="0"
                   />
                   <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                    ¥{Math.floor((Number(newTodoEstimate || 0) / 60) * 1200).toLocaleString()} 相当の価値
+                    ¥{Math.floor((Number(newTodoEstimate || 0) / 60) * effectiveHourlyWageJpy).toLocaleString()} 相当の価値
                   </div>
                 </div>
                 <div className="form-group" style={{ flex: 2 }}>
@@ -2072,6 +2227,47 @@ export default function Dashboard({ user, onLogout }) {
         }
         .trend.positive { background: rgba(132, 204, 22, 0.2); color: #4d7c0f; }
         .trend.negative { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
+        .hourly-wage-form {
+          display: flex;
+          flex-direction: column;
+          gap: 0.55rem;
+        }
+        .hourly-wage-input-row {
+          display: flex;
+          align-items: center;
+          gap: 0.55rem;
+        }
+        .hourly-wage-input {
+          flex: 1;
+          min-width: 0;
+          border: 1px solid var(--tf-border);
+          border-radius: 10px;
+          padding: 0.46rem 0.6rem;
+          font-size: 0.83rem;
+          color: var(--tf-text);
+          background: #ffffff;
+        }
+        .btn-hourly-wage-save {
+          border: none;
+          border-radius: 9px;
+          padding: 0.46rem 0.72rem;
+          min-width: 66px;
+          background: linear-gradient(135deg, var(--tf-primary), var(--tf-primary-light));
+          color: #ffffff;
+          font-size: 0.74rem;
+          font-weight: 800;
+          cursor: pointer;
+        }
+        .btn-hourly-wage-save:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .hourly-wage-error {
+          color: #b91c1c;
+          font-size: 0.72rem;
+          font-weight: 600;
+          line-height: 1.35;
+        }
 
         .analysis-main-grid {
           display: grid;
