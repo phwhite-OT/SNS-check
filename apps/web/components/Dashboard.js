@@ -118,11 +118,37 @@ function findMatchingBlacklistDomain(candidateDomain, blacklistDomains) {
 
 function buildBlacklistSyncToken(blacklist) {
   const domains = (Array.isArray(blacklist) ? blacklist : [])
-    .map((item) => normalizeDomainInput(item?.domain))
+    .map((item) => normalizeDomainInput(typeof item === 'string' ? item : item?.domain))
     .filter(Boolean)
     .sort();
   return domains.join('|');
 }
+
+function getBlacklistItemDomain(item) {
+  return normalizeDomainInput(typeof item === 'string' ? item : item?.domain);
+}
+
+function normalizeBlacklistItems(items) {
+  const list = Array.isArray(items) ? items : [];
+  return list
+    .map((item) => {
+      const domain = getBlacklistItemDomain(item);
+      if (!domain) return null;
+      if (typeof item === 'string') {
+        return { domain, name: domain.split('.')[0] || domain };
+      }
+      return { ...item, domain };
+    })
+    .filter(Boolean);
+}
+
+const DEFAULT_BLACKLIST_DOMAINS = new Set([
+  'youtube.com',
+  'twitter.com',
+  'x.com',
+  'instagram.com',
+  'tiktok.com',
+]);
 
 const DEMO_DATA = {
   todos: [
@@ -577,7 +603,7 @@ export default function Dashboard({ user, onLogout }) {
       return;
     }
 
-    const alreadyExists = (data?.blacklist || []).some((item) => normalizeDomainInput(item?.domain) === normalized);
+    const alreadyExists = (data?.blacklist || []).some((item) => getBlacklistItemDomain(item) === normalized);
     if (alreadyExists) {
       setBlacklistError('そのドメインはすでにブラックリストに登録されています。');
       return;
@@ -618,8 +644,23 @@ export default function Dashboard({ user, onLogout }) {
         throw new Error(errorData?.error || 'ドメイン追加に失敗しました。');
       }
 
+      const result = await response.json().catch(() => ({}));
+      if (Array.isArray(result?.blacklist)) {
+        setData((prev) => (prev ? { ...prev, blacklist: normalizeBlacklistItems(result.blacklist) } : prev));
+      } else {
+        setData((prev) => {
+          if (!prev) return prev;
+          const current = Array.isArray(prev.blacklist) ? prev.blacklist : [];
+          const exists = current.some((item) => getBlacklistItemDomain(item) === normalized);
+          if (exists) return prev;
+          return {
+            ...prev,
+            blacklist: [...current, { domain: normalized, name: normalized.split('.')[0] || normalized }],
+          };
+        });
+      }
+
       setBlacklistInput('');
-      await fetchData();
     } catch (e) {
       console.error(e);
       setBlacklistError(e.message || 'ドメイン追加に失敗しました。');
@@ -644,7 +685,7 @@ export default function Dashboard({ user, onLogout }) {
         const current = Array.isArray(prev.blacklist) ? prev.blacklist : [];
         return {
           ...prev,
-          blacklist: current.filter((item) => normalizeDomainInput(item?.domain) !== normalized),
+          blacklist: current.filter((item) => getBlacklistItemDomain(item) !== normalized),
         };
       });
       return;
@@ -667,7 +708,19 @@ export default function Dashboard({ user, onLogout }) {
         throw new Error(errorData?.error || 'ドメイン削除に失敗しました。');
       }
 
-      await fetchData();
+      const result = await response.json().catch(() => ({}));
+      if (Array.isArray(result?.blacklist)) {
+        setData((prev) => (prev ? { ...prev, blacklist: normalizeBlacklistItems(result.blacklist) } : prev));
+      } else {
+        setData((prev) => {
+          if (!prev) return prev;
+          const current = Array.isArray(prev.blacklist) ? prev.blacklist : [];
+          return {
+            ...prev,
+            blacklist: current.filter((item) => getBlacklistItemDomain(item) !== normalized),
+          };
+        });
+      }
     } catch (e) {
       console.error(e);
       setBlacklistError(e.message || 'ドメイン削除に失敗しました。');
@@ -832,7 +885,7 @@ export default function Dashboard({ user, onLogout }) {
   const blacklistDomains = useMemo(() => {
     return Array.from(new Set(
       (data?.blacklist || [])
-        .map((item) => normalizeDomainInput(item?.domain))
+        .map((item) => getBlacklistItemDomain(item))
         .filter(Boolean)
     ));
   }, [data?.blacklist]);
@@ -851,40 +904,23 @@ export default function Dashboard({ user, onLogout }) {
       usageMap.set(key, prev);
     });
 
-    const rows = [];
-    const consumedUsageKeys = new Set();
-
-    blacklistDomains.forEach((blacklistedDomain) => {
+    const rows = blacklistDomains.map((blacklistedDomain) => {
       let timeSpent = 0;
       let visits = 0;
 
-      usageMap.forEach((usage, usageKey) => {
+      usageMap.forEach((usage) => {
         if (!doesDomainMatchRule(blacklistedDomain, usage.domain)) return;
         timeSpent += usage.timeSpent;
         visits += usage.visits;
-        consumedUsageKeys.add(usageKey);
       });
 
-      rows.push({
+      return {
         domain: blacklistedDomain,
         timeSpent,
         visits,
         isBlacklisted: true,
         matchedRuleDomain: blacklistedDomain,
-      });
-    });
-
-    usageMap.forEach((usage, usageKey) => {
-      if (consumedUsageKeys.has(usageKey)) return;
-      const matchedRuleDomain = findMatchingBlacklistDomain(usage.domain, blacklistDomains);
-
-      rows.push({
-        domain: matchedRuleDomain || usage.domain,
-        timeSpent: usage.timeSpent,
-        visits: usage.visits,
-        isBlacklisted: Boolean(matchedRuleDomain),
-        matchedRuleDomain,
-      });
+      };
     });
 
     rows.sort((a, b) => {
