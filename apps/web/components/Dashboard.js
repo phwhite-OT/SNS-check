@@ -961,6 +961,10 @@ export default function Dashboard({ user, onLogout }) {
     ));
   }, [data?.blacklist]);
 
+  const blacklistSyncToken = useMemo(() => {
+    return buildBlacklistSyncToken(data?.blacklist);
+  }, [data?.blacklist]);
+
   const analysisDomainRows = useMemo(() => {
     const usageMap = new Map();
 
