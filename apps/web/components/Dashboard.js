@@ -116,6 +116,14 @@ function findMatchingBlacklistDomain(candidateDomain, blacklistDomains) {
   return blacklistDomains.find((ruleDomain) => doesDomainMatchRule(ruleDomain, candidateDomain)) || null;
 }
 
+function buildBlacklistSyncToken(blacklist) {
+  const domains = (Array.isArray(blacklist) ? blacklist : [])
+    .map((item) => normalizeDomainInput(item?.domain))
+    .filter(Boolean)
+    .sort();
+  return domains.join('|');
+}
+
 const DEMO_DATA = {
   todos: [
     { id: 'd1', title: '【重要】最終レポートの構成作成', completed: false, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: '章立てと参考文献のリストアップ [estimate:120]' },
@@ -2460,6 +2468,7 @@ export default function Dashboard({ user, onLogout }) {
         id="extension-sync-data"
         data-user-id={user?.id}
         data-api-url={API_BASE.startsWith('http') ? API_BASE : (typeof window !== 'undefined' ? window.location.origin + API_BASE : '')}
+        data-sync-token={blacklistSyncToken}
         style={{ display: 'none' }}
       ></div>
     </div>

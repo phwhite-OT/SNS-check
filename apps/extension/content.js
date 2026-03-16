@@ -2,21 +2,23 @@
 (function () {
     let lastSentUserId = null;
     let lastSentApiUrl = null;
+    let lastSentSyncToken = null;
 
-    function sendSyncConfig(userId, apiUrl) {
+    function sendSyncConfig(userId, apiUrl, syncToken) {
         if (!userId && !apiUrl) return;
 
-        if (lastSentUserId === userId && lastSentApiUrl === apiUrl) {
+        if (lastSentUserId === userId && lastSentApiUrl === apiUrl && lastSentSyncToken === syncToken) {
             return;
         }
 
         lastSentUserId = userId;
         lastSentApiUrl = apiUrl;
+        lastSentSyncToken = syncToken;
 
         chrome.runtime.sendMessage(
             {
                 type: 'sync:config',
-                config: { userId, apiUrl }
+                config: { userId, apiUrl, syncToken }
             },
             (response) => {
                 if (chrome.runtime.lastError) {
@@ -33,7 +35,8 @@
 
         const userId = (syncEl.getAttribute('data-user-id') || '').trim();
         const apiUrl = (syncEl.getAttribute('data-api-url') || '').trim();
-        sendSyncConfig(userId || null, apiUrl || null);
+        const syncToken = (syncEl.getAttribute('data-sync-token') || '').trim();
+        sendSyncConfig(userId || null, apiUrl || null, syncToken || null);
         return true;
     }
 
@@ -48,7 +51,7 @@
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['data-user-id', 'data-api-url']
+        attributeFilter: ['data-user-id', 'data-api-url', 'data-sync-token']
     });
 
     // 念のためロード完了後にも再試行
