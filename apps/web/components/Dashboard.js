@@ -65,6 +65,57 @@ function toDueTimestamp(dueDate) {
   return Number.isFinite(ts) ? ts : Number.POSITIVE_INFINITY;
 }
 
+function normalizeDomainInput(rawDomain) {
+  const raw = String(rawDomain || '').trim().toLowerCase();
+  if (!raw) return '';
+
+  let candidate = raw;
+  try {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
+      candidate = new URL(candidate).hostname.toLowerCase();
+    } else {
+      const withProtocol = candidate.startsWith('//') ? `https:${candidate}` : `https://${candidate}`;
+      candidate = new URL(withProtocol).hostname.toLowerCase();
+    }
+  } catch (_error) {
+    candidate = candidate.split('/')[0].split('?')[0].split('#')[0].toLowerCase();
+  }
+
+  candidate = candidate.replace(/^www\./, '').replace(/\.$/, '');
+  return candidate;
+}
+
+function isValidDomainCandidate(input) {
+  const domain = normalizeDomainInput(input);
+  if (!domain) return false;
+  if (domain.length > 253) return false;
+  if (!domain.includes('.')) return false;
+  if (domain.includes('..')) return false;
+  if (!/^[a-z0-9.-]+$/.test(domain)) return false;
+
+  const labels = domain.split('.');
+  return labels.every((label) => (
+    label.length > 0
+    && label.length <= 63
+    && !label.startsWith('-')
+    && !label.endsWith('-')
+  ));
+}
+
+function doesDomainMatchRule(ruleDomain, candidateDomain) {
+  const rule = normalizeDomainInput(ruleDomain);
+  const candidate = normalizeDomainInput(candidateDomain);
+  if (!rule || !candidate) return false;
+  if (rule === candidate) return true;
+  if (candidate.endsWith(`.${rule}`)) return true;
+  if (rule.endsWith(`.${candidate}`)) return true;
+  return rule.includes(candidate) || candidate.includes(rule);
+}
+
+function findMatchingBlacklistDomain(candidateDomain, blacklistDomains) {
+  return blacklistDomains.find((ruleDomain) => doesDomainMatchRule(ruleDomain, candidateDomain)) || null;
+}
+
 const DEMO_DATA = {
   todos: [
     { id: 'd1', title: '【重要】最終レポートの構成作成', completed: false, priority: 'high', dueDate: format(new Date(), 'yyyy-MM-dd'), description: '章立てと参考文献のリストアップ [estimate:120]' },
@@ -170,7 +221,6 @@ export default function Dashboard({ user, onLogout }) {
   const [newTodoEstimate, setNewTodoEstimate] = useState(''); // 分単位
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isWelcomeBannerVisible, setIsWelcomeBannerVisible] = useState(true);
-  const [newBlacklistDomain, setNewBlacklistDomain] = useState('');
   const [blacklistBusy, setBlacklistBusy] = useState(false);
   const [blacklistError, setBlacklistError] = useState('');
 
@@ -505,21 +555,40 @@ export default function Dashboard({ user, onLogout }) {
   };
 
   const handleAddBlacklist = async (inputOrEvent) => {
-    if (inputOrEvent && typeof inputOrEvent.preventDefault === 'function') {
+    const isSubmitEvent = Boolean(inputOrEvent && typeof inputOrEvent.preventDefault === 'function');
+    if (isSubmitEvent) {
       inputOrEvent.preventDefault();
     }
 
-    const rawDomain = (inputOrEvent && typeof inputOrEvent.preventDefault === 'function')
-      ? newBlacklistDomain
-      : inputOrEvent;
-
+    const rawDomain = isSubmitEvent ? blacklistInput : inputOrEvent;
     const normalized = normalizeDomainInput(rawDomain);
+
     if (!isValidDomainCandidate(normalized)) {
       setBlacklistError('有効なドメインを入力してください（例: youtube.com）。');
       return;
     }
 
+    const alreadyExists = (data?.blacklist || []).some((item) => normalizeDomainInput(item?.domain) === normalized);
+    if (alreadyExists) {
+      setBlacklistError('そのドメインはすでにブラックリストに登録されています。');
+      return;
+    }
+
     if (blacklistBusy) return;
+
+    if (isDemoMode) {
+      setData((prev) => {
+        if (!prev) return prev;
+        const current = Array.isArray(prev.blacklist) ? prev.blacklist : [];
+        return {
+          ...prev,
+          blacklist: [...current, { domain: normalized, name: normalized.split('.')[0] || normalized }],
+        };
+      });
+      setBlacklistInput('');
+      setBlacklistError('');
+      return;
+    }
 
     setBlacklistBusy(true);
     setBlacklistActionDomain(normalized);
@@ -540,9 +609,6 @@ export default function Dashboard({ user, onLogout }) {
         throw new Error(errorData?.error || 'ドメイン追加に失敗しました。');
       }
 
-      if (inputOrEvent && typeof inputOrEvent.preventDefault === 'function') {
-        setNewBlacklistDomain('');
-      }
       setBlacklistInput('');
       await fetchData();
     } catch (e) {
@@ -561,6 +627,19 @@ export default function Dashboard({ user, onLogout }) {
     }
 
     if (blacklistBusy) return;
+
+    if (isDemoMode) {
+      setBlacklistError('');
+      setData((prev) => {
+        if (!prev) return prev;
+        const current = Array.isArray(prev.blacklist) ? prev.blacklist : [];
+        return {
+          ...prev,
+          blacklist: current.filter((item) => normalizeDomainInput(item?.domain) !== normalized),
+        };
+      });
+      return;
+    }
 
     setBlacklistBusy(true);
     setBlacklistActionDomain(normalized);
@@ -741,9 +820,76 @@ export default function Dashboard({ user, onLogout }) {
 
   // Analysis Page Data
   const siteBreakdown = data?.siteBreakdown || [];
-  const sortedBreakdown = useMemo(() => {
-    return [...siteBreakdown].sort((a, b) => b.timeSpent - a.timeSpent);
-  }, [siteBreakdown]);
+  const blacklistDomains = useMemo(() => {
+    return Array.from(new Set(
+      (data?.blacklist || [])
+        .map((item) => normalizeDomainInput(item?.domain))
+        .filter(Boolean)
+    ));
+  }, [data?.blacklist]);
+
+  const analysisDomainRows = useMemo(() => {
+    const usageMap = new Map();
+
+    siteBreakdown.forEach((site) => {
+      const rawDomain = String(site?.domain || '').trim().toLowerCase();
+      if (!rawDomain) return;
+
+      const key = normalizeDomainInput(rawDomain) || rawDomain;
+      const prev = usageMap.get(key) || { domain: key, timeSpent: 0, visits: 0 };
+      prev.timeSpent += Number(site?.timeSpent || 0);
+      prev.visits += Number(site?.visits || 0);
+      usageMap.set(key, prev);
+    });
+
+    const rows = [];
+    const consumedUsageKeys = new Set();
+
+    blacklistDomains.forEach((blacklistedDomain) => {
+      let timeSpent = 0;
+      let visits = 0;
+
+      usageMap.forEach((usage, usageKey) => {
+        if (!doesDomainMatchRule(blacklistedDomain, usage.domain)) return;
+        timeSpent += usage.timeSpent;
+        visits += usage.visits;
+        consumedUsageKeys.add(usageKey);
+      });
+
+      rows.push({
+        domain: blacklistedDomain,
+        timeSpent,
+        visits,
+        isBlacklisted: true,
+        matchedRuleDomain: blacklistedDomain,
+      });
+    });
+
+    usageMap.forEach((usage, usageKey) => {
+      if (consumedUsageKeys.has(usageKey)) return;
+      const matchedRuleDomain = findMatchingBlacklistDomain(usage.domain, blacklistDomains);
+
+      rows.push({
+        domain: matchedRuleDomain || usage.domain,
+        timeSpent: usage.timeSpent,
+        visits: usage.visits,
+        isBlacklisted: Boolean(matchedRuleDomain),
+        matchedRuleDomain,
+      });
+    });
+
+    rows.sort((a, b) => {
+      if (b.timeSpent !== a.timeSpent) return b.timeSpent - a.timeSpent;
+      return (a.domain || '').localeCompare((b.domain || ''), 'en');
+    });
+
+    return rows;
+  }, [siteBreakdown, blacklistDomains]);
+
+  const topSiteDomain = useMemo(() => {
+    const withTime = analysisDomainRows.find((row) => row.timeSpent > 0);
+    return withTime?.domain || analysisDomainRows[0]?.domain || null;
+  }, [analysisDomainRows]);
 
   const totalTimeInMinutes = siteBreakdown.reduce((acc, curr) => acc + curr.timeSpent, 0);
   const totalTimeSeconds = data?.totalTimeSeconds || (totalTimeInMinutes * 60);
@@ -1275,7 +1421,7 @@ export default function Dashboard({ user, onLogout }) {
                 <div className="summary-stat-card">
                   <span className="label">最長滞在サイト</span>
                   <div className="value-group">
-                    <span className="value value-domain">{sortedBreakdown[0]?.domain || 'N/A'}</span>
+                    <span className="value value-domain">{topSiteDomain || 'N/A'}</span>
                   </div>
                 </div>
               </div>
@@ -1338,9 +1484,65 @@ export default function Dashboard({ user, onLogout }) {
                 </section>
 
                 <section className="glass-card table-section">
-                  <div className="card-header" style={{ marginBottom: '1.5rem' }}>
+                  <div className="card-header" style={{ marginBottom: '1rem' }}>
                     <h2>ドメイン詳細</h2>
                   </div>
+
+                  <div className="domain-manager-toolbar">
+                    <form className="domain-manage-form" onSubmit={handleAddBlacklist}>
+                      <input
+                        type="text"
+                        className="domain-manage-input"
+                        value={blacklistInput}
+                        onChange={(e) => {
+                          setBlacklistInput(e.target.value);
+                          if (blacklistError) setBlacklistError('');
+                        }}
+                        placeholder="追加したいドメインを入力 (例: youtube.com)"
+                        disabled={blacklistBusy}
+                      />
+                      <button
+                        type="submit"
+                        className="btn-domain-add"
+                        disabled={blacklistBusy}
+                      >
+                        {blacklistBusy && !blacklistActionDomain ? '処理中...' : 'ブラックリストに追加'}
+                      </button>
+                    </form>
+
+                    {blacklistError && (
+                      <div className="blacklist-error-text">
+                        {blacklistError}
+                      </div>
+                    )}
+
+                    <div className="blacklist-chip-list">
+                      {blacklistDomains.length === 0 ? (
+                        <span className="text-muted" style={{ fontSize: '0.78rem' }}>
+                          ブラックリストは空です。
+                        </span>
+                      ) : (
+                        blacklistDomains.map((domain) => {
+                          const isDeleting = blacklistBusy && blacklistActionDomain === domain;
+                          return (
+                            <span key={domain} className="blacklist-chip">
+                              <span>{domain}</span>
+                              <button
+                                type="button"
+                                className="blacklist-chip-remove"
+                                disabled={blacklistBusy}
+                                onClick={() => handleDeleteBlacklist(domain)}
+                                aria-label={`${domain} をブラックリストから削除`}
+                              >
+                                {isDeleting ? '...' : '×'}
+                              </button>
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
                   <div className="domain-table-container">
                     <table className="domain-table">
                       <thead>
@@ -1352,32 +1554,71 @@ export default function Dashboard({ user, onLogout }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedBreakdown.map((site) => (
-                          <tr key={site.domain}>
-                            <td>
-                              <div className="domain-cell-main">
-                                <div className="domain-icon-wrapper">
-                                  <Globe size={14} />
+                        {analysisDomainRows.map((site) => {
+                          const normalizedDomain = normalizeDomainInput(site.domain);
+                          const percentage = totalTimeInMinutes > 0
+                            ? Math.round((site.timeSpent / totalTimeInMinutes) * 100)
+                            : 0;
+                          const isProcessingThisDomain = blacklistBusy && blacklistActionDomain === normalizedDomain;
+                          const canOpen = isValidDomainCandidate(normalizedDomain);
+                          const canAddFromRow = isValidDomainCandidate(normalizedDomain);
+                          const canToggle = site.isBlacklisted || canAddFromRow;
+
+                          return (
+                            <tr key={site.domain}>
+                              <td>
+                                <div className="domain-cell-main">
+                                  <div className="domain-icon-wrapper">
+                                    <Globe size={14} />
+                                  </div>
+                                  <span className="domain-name">{site.domain}</span>
                                 </div>
-                                <span className="domain-name">{site.domain}</span>
-                              </div>
-                            </td>
-                            <td className="domain-time">{formatTime(site.timeSpent)}</td>
-                            <td>
-                              <div className="percentage-container">
-                                <div className="percentage-bar">
-                                  <div className="percentage-fill" style={{ width: `${Math.round((site.timeSpent / totalTimeInMinutes) * 100)}%` }}></div>
+                              </td>
+                              <td className="domain-time">{formatTime(site.timeSpent)}</td>
+                              <td>
+                                <div className="percentage-container">
+                                  <div className="percentage-bar">
+                                    <div className="percentage-fill" style={{ width: `${percentage}%` }}></div>
+                                  </div>
+                                  <span className="percentage-text">{percentage}%</span>
                                 </div>
-                                <span className="percentage-text">{Math.round((site.timeSpent / totalTimeInMinutes) * 100)}%</span>
-                              </div>
-                            </td>
-                            <td>
-                              <button className="btn-domain-action" onClick={() => window.open(`https://${site.domain}`, '_blank')}>
-                                <ExternalLink size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td>
+                                <div className="domain-actions">
+                                  <button
+                                    className="btn-domain-action"
+                                    disabled={!canOpen}
+                                    onClick={() => canOpen && window.open(`https://${normalizedDomain}`, '_blank')}
+                                    title="サイトを開く"
+                                  >
+                                    <ExternalLink size={14} />
+                                  </button>
+
+                                  <button
+                                    className={`btn-domain-action ${site.isBlacklisted ? 'danger' : 'primary'}`}
+                                    onClick={() => {
+                                      if (site.isBlacklisted) {
+                                        handleDeleteBlacklist(site.matchedRuleDomain || site.domain);
+                                        return;
+                                      }
+                                      handleAddBlacklist(site.domain);
+                                    }}
+                                    disabled={blacklistBusy || !canToggle}
+                                    title={site.isBlacklisted ? 'ブラックリストから削除' : 'ブラックリストに追加'}
+                                  >
+                                    {isProcessingThisDomain ? (
+                                      <LoaderCircle size={14} className="icon-spin" />
+                                    ) : site.isBlacklisted ? (
+                                      <Trash2 size={14} />
+                                    ) : (
+                                      <Plus size={14} />
+                                    )}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1838,6 +2079,80 @@ export default function Dashboard({ user, onLogout }) {
           gap: 1.5rem;
         }
 
+        .domain-manager-toolbar {
+          display: flex;
+          flex-direction: column;
+          gap: 0.6rem;
+          margin-bottom: 1rem;
+        }
+        .domain-manage-form {
+          display: flex;
+          gap: 0.55rem;
+          flex-wrap: wrap;
+        }
+        .domain-manage-input {
+          flex: 1;
+          min-width: 220px;
+          border: 1px solid var(--tf-border);
+          border-radius: 10px;
+          padding: 0.58rem 0.75rem;
+          font-size: 0.85rem;
+          color: var(--tf-text);
+          background: #ffffff;
+        }
+        .btn-domain-add {
+          border: none;
+          border-radius: 10px;
+          padding: 0.58rem 0.9rem;
+          background: linear-gradient(135deg, var(--tf-primary), var(--tf-primary-light));
+          color: white;
+          font-weight: 700;
+          font-size: 0.78rem;
+          cursor: pointer;
+        }
+        .btn-domain-add:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .blacklist-error-text {
+          font-size: 0.78rem;
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          border-radius: 8px;
+          padding: 0.4rem 0.6rem;
+          background: rgba(239, 68, 68, 0.08);
+          color: #b91c1c;
+        }
+        .blacklist-chip-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.45rem;
+        }
+        .blacklist-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          padding: 0.2rem 0.45rem 0.2rem 0.55rem;
+          border-radius: 999px;
+          border: 1px solid rgba(15, 118, 110, 0.25);
+          background: rgba(15, 118, 110, 0.08);
+          color: #0f766e;
+          font-size: 0.72rem;
+          font-weight: 700;
+        }
+        .blacklist-chip-remove {
+          border: none;
+          background: transparent;
+          color: #0f766e;
+          font-size: 0.8rem;
+          line-height: 1;
+          cursor: pointer;
+          padding: 0;
+        }
+        .blacklist-chip-remove:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
         .domain-table {
           width: 100%;
           border-collapse: collapse;
@@ -1909,12 +2224,36 @@ export default function Dashboard({ user, onLogout }) {
           cursor: pointer;
           transition: all 0.2s;
         }
+        .domain-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+        }
+        .btn-domain-action.primary {
+          background: rgba(15, 118, 110, 0.12);
+          color: #0f766e;
+        }
+        .btn-domain-action.danger {
+          background: rgba(239, 68, 68, 0.14);
+          color: #b91c1c;
+        }
+        .btn-domain-action:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
         .btn-domain-action:hover {
           background: rgba(15, 118, 110, 0.2);
           color: var(--tf-primary);
         }
+        .icon-spin {
+          animation: tfSpin 1s linear infinite;
+        }
         .animate-fade-in {
           animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes tfSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }

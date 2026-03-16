@@ -161,9 +161,8 @@ async function fetchBlacklist() {
             newSites[domain] = siteName;
         });
 
-        targetSites = Object.keys(newSites).length > 0
-            ? newSites
-            : { ...FALLBACK_TARGET_SITES };
+        // ログイン済みで blacklist API が正常応答した場合は、空配列も有効設定として扱う。
+        targetSites = newSites;
     } catch (_error) {
         targetSites = { ...FALLBACK_TARGET_SITES };
     }
@@ -383,11 +382,12 @@ function handleTabSwitch(tabId) {
             for (const [domain, siteName] of Object.entries(targetSites)) {
                 if (!url.hostname.includes(domain)) continue;
 
-                activeSite = siteName;
+                // 保存と送信は表示名ではなくドメインで統一し、DB側集計の精度を保つ。
+                activeSite = domain;
                 startTime = Date.now();
 
                 if (focusModeEnabled && !lockedTabs.has(tabId)) {
-                    triggerLockScreen(tabId, siteName);
+                    triggerLockScreen(tabId, siteName || domain);
                 }
                 break;
             }
