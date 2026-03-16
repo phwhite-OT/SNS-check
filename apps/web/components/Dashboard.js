@@ -1085,6 +1085,10 @@ export default function Dashboard({ user, onLogout }) {
     });
   }, [data?.hourlyStats, totalRecoveredJpy]);
 
+  const currentNetBalance = assetLossData.length > 0
+    ? assetLossData[assetLossData.length - 1].netBalance
+    : 0;
+
   const off = useMemo(() => {
     if (!assetLossData.length) return 0;
     const dataMax = Math.max(...assetLossData.map((i) => i.netBalance || 0), 0);
@@ -1585,10 +1589,15 @@ export default function Dashboard({ user, onLogout }) {
                   </div>
                 </div>
                 <div className="summary-stat-card">
-                  <span className="label">潜在ロス (JPY)</span>
+                  <span className="label">現在の収支 (JPY)</span>
                   <div className="value-group">
-                    <span className="value">¥{jpyValue.toLocaleString()}</span>
-                    <span className="trend negative"><TrendingDown size={14} /> 損失</span>
+                    <span className="value" style={{ color: currentNetBalance >= 0 ? 'var(--tf-accent-lime)' : '#ef4444' }}>
+                      ¥{currentNetBalance.toLocaleString()}
+                    </span>
+                    <span className={`trend ${currentNetBalance >= 0 ? 'positive' : 'negative'}`}>
+                      {currentNetBalance >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                      {currentNetBalance >= 0 ? '利益' : '損失'}
+                    </span>
                   </div>
                 </div>
                 <div className="summary-stat-card">
